@@ -172,7 +172,10 @@ def _build_query_row_tables(
 
 # Attention compiles separately from the model's fullgraph capture, which can't
 # hold the per-sequence Python loop around these.
-_page_attn_compiled = torch.compile(page_attn_kernel, dynamic=False)
+# ``for_each_tile`` lowers through scan/while_loop and its decomposition reads
+# the scalar induction variable with ``item()``.  Full-graph Dynamo capture
+# enables scalar outputs for that HOP without changing the process-wide config.
+_page_attn_compiled = torch.compile(page_attn_kernel, dynamic=False, fullgraph=True)
 _batched_decode_compiled = torch.compile(batched_decode_kernel, dynamic=False)
 
 compile_guard.watch(page_attn_kernel, "page attention kernel")
@@ -288,8 +291,8 @@ class SpyreAttentionMetadata(AttentionMetadata):
 
     # Gather indices for the paged attention loop, one row per active block:
     # [num_seqs, max_active_blocks, INT32_ELEMS_PER_STICK] int32 with the page
-    # index at [s, b, 0]. Each index needs its own stick-wide row to compile,
-    # which is why block_table cannot serve as the index.
+    # index at [s, b, 0]. Each index needs its own stick-wide row so the
+    # for_each_tile body can select its K/V page on device.
     # One table per sequence at its own active-block count, materialized once per
     # step: a batch-max width would put max(num_active) into the kernel's guards.
     page_index_tables_cpu: list[torch.Tensor] | None = None

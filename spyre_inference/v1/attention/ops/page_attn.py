@@ -15,6 +15,7 @@
 """Per-sequence paged attention over the KV cache."""
 
 import torch
+from torch_spyre._inductor.wsr import for_each_tile
 
 
 def page_attn_kernel(
@@ -36,8 +37,10 @@ def page_attn_kernel(
 ):
     """Online softmax attention over ``num_blocks`` KV pages.
 
-    Under `dynamic=False` Dynamo specializes on every non-tensor argument, so the
-    page loop is unrolled per variant.
+    The page walk is a ``for_each_tile`` reduction. Keeping one page's work in a
+    loop body makes compile cost independent of ``num_blocks``. Each iteration
+    reads one page-table row and selects the physical K/V page without first
+    materializing the sequence's whole cache.
 
     Expected shapes:
         query: [num_tokens, num_heads, head_size], the whole batch's query
@@ -68,23 +71,20 @@ def page_attn_kernel(
         .reshape(num_kv_heads, num_queries_per_kv, padded_query_len, head_size)
     )
 
-    tile_max = None
-    tile_sum = None
-    tile_output = None
-
-    for i in range(num_blocks):
-        # index_select, not `k_pages[page_idx]`: subscripting lowers to
-        # aten.index, which upcasts the int32 index to int64 and fails eager.
-        page_idx = page_index_table[i, 0:1]
-        k_page = k_pages.index_select(0, page_idx)
-        v_page = v_pages.index_select(0, page_idx)
+    def page_body(carry, tiles):
+        tile_max, tile_sum, tile_output = carry
+        table_row, mask_tile, q_whole, k_whole, v_whole, *bias_tiles = tiles
+        # A tiled 1-D index is read as element zero on every device iteration.
+        # A stick-wide row instead gives this body an offset-zero [1, 32]
+        # tensor, from which index_select can read the current page number.
+        page_idx = table_row[0, 0:1]
+        k_page = k_whole.index_select(0, page_idx)
+        v_page = v_whole.index_select(0, page_idx)
         # Token-major page to head-major for the matmuls; permutes on device.
         k_page_4d = k_page.squeeze(0).permute(1, 0, 2).unsqueeze(1)
         v_page_4d = v_page.squeeze(0).permute(1, 0, 2).unsqueeze(1)
 
-        mask_tile = mask_tiles[i]
-
-        scores = torch.matmul(q, k_page_4d.transpose(-2, -1)) * scale
+        scores = torch.matmul(q_whole, k_page_4d.transpose(-2, -1)) * scale
         if logits_soft_cap > 0.0:
             # Pull logits into (-cap, +cap) before the mask add so masked
             # positions still map cleanly to -inf. Applied before the ALiBi
@@ -94,30 +94,37 @@ def page_attn_kernel(
             # ALiBi bias slope[h] * (kv_pos - context_len). The additive
             # mask_tile below uses finfo.min for masked positions, so this
             # bias cannot un-mask them.
-            scores = scores + alibi_bias_tiles[i]
-        scores = scores + mask_tile
+            scores = scores + bias_tiles[0].squeeze(0)
+        scores = scores + mask_tile.squeeze(0)
         scores_max = torch.amax(scores, dim=-1, keepdim=True)
+        new_max = torch.maximum(tile_max, scores_max)
+        rescale = torch.exp(tile_max - new_max)
+        tile_probs = torch.exp(scores - new_max)
+        new_output = tile_output * rescale + torch.matmul(tile_probs, v_page_4d)
+        new_sum = tile_sum * rescale + tile_probs.sum(dim=-1, keepdim=True)
+        return (new_max, new_sum, new_output), None
 
-        if i == 0:
-            tile_max = scores_max
-            tile_probs = torch.exp(scores - tile_max)
-            tile_output = torch.matmul(tile_probs, v_page_4d)
-            tile_sum = tile_probs.sum(dim=-1, keepdim=True)
-        else:
-            # i > 0 only reachable after the i == 0 branch initialized these.
-            assert tile_max is not None
-            assert tile_sum is not None
-            assert tile_output is not None
-            new_max = torch.maximum(tile_max, scores_max)
-            rescale = torch.exp(tile_max - new_max)
-            tile_output = tile_output * rescale
-            tile_sum = tile_sum * rescale
-            tile_probs = torch.exp(scores - new_max)
-            tile_output += torch.matmul(tile_probs, v_page_4d)
-            tile_sum = tile_sum + tile_probs.sum(dim=-1, keepdim=True)
-            tile_max = new_max
+    mask = torch.stack(mask_tiles)
+    loop_operands = (page_index_table, mask, q, k_pages, v_pages)
+    loop_dims = (0, 0, None, None, None)
+    if alibi_bias_tiles is not None:
+        loop_operands += (torch.stack(alibi_bias_tiles),)
+        loop_dims += (0,)
 
-    assert tile_output is not None and tile_sum is not None
+    acc_shape = (*q.shape[:-1], 1)
+    init = (
+        torch.full(acc_shape, float("-inf"), device=q.device, dtype=q.dtype),
+        torch.zeros(acc_shape, device=q.device, dtype=q.dtype),
+        torch.zeros_like(q),
+    )
+    (_, tile_sum, tile_output), _ = for_each_tile(
+        page_body,
+        loop_operands,
+        dims=loop_dims,
+        tile_size=1,
+        init=init,
+    )
+
     attn = tile_output / tile_sum
     attn = attn.reshape(1, num_heads, padded_query_len, head_size).transpose(1, 2)
     attn = attn.reshape(padded_query_len, num_heads, head_size)
