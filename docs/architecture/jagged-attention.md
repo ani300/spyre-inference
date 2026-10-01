@@ -120,5 +120,5 @@ split decode for design comparisons. Split decode emits partial softmax states
 in one kernel and merges them in another. These are explicit benchmark choices;
 serving uses the grouped decode/prefill schedule described above.
 
-See the [microbenchmark guide](../../scripts/microbench/README.md#jagged-latency-comparison)
+See the [microbenchmark guide](https://github.com/torch-spyre/spyre-inference/blob/main/scripts/microbench/README.md#jagged-latency-comparison)
 for commands, measurement boundaries and correctness gates.
