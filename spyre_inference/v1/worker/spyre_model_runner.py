@@ -41,7 +41,7 @@ from __future__ import annotations
 import bisect
 import time
 from contextlib import contextmanager
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import torch
@@ -118,6 +118,9 @@ from spyre_inference.v1.worker.spyre_shape_bucketer import (
     expand_packed_token_types,
     logits_row_buckets,
 )
+
+if TYPE_CHECKING:
+    from spyre_inference.v1.spec_decode.dflash import SpyreDFlashProposer
 
 logger = init_logger(__name__)
 
@@ -362,6 +365,7 @@ class _SpyreModelWrapper:
         shape_bucketer: SpyreShapeBucketer | None = None,
         *,
         model_dtype: torch.dtype,
+        keep_aux_hidden_states_on_device: bool = False,
     ):
         # Use object.__setattr__ to avoid triggering __setattr__ override
         object.__setattr__(self, "_model", model)
@@ -370,6 +374,9 @@ class _SpyreModelWrapper:
         object.__setattr__(self, "_logits_row_buckets", logits_row_buckets or [])
         object.__setattr__(self, "_shape_bucketer", shape_bucketer)
         object.__setattr__(self, "_model_dtype", model_dtype)
+        object.__setattr__(
+            self, "_keep_aux_hidden_states_on_device", keep_aux_hidden_states_on_device
+        )
 
     def __call__(self, *args, **kwargs):
         # Convert integer tensor inputs to Spyre int64. Do not use int32:
@@ -392,7 +399,11 @@ class _SpyreModelWrapper:
 
         # Pooling: keep on Spyre. Generative: D2H for sampling.
         if not self._keep_outputs_on_device:
-            result = convert_tensor_tree(result, device="cpu")
+            if self._keep_aux_hidden_states_on_device:
+                hidden_states, aux_hidden_states = result
+                result = (convert_tensor_tree(hidden_states, device="cpu"), aux_hidden_states)
+            else:
+                result = convert_tensor_tree(result, device="cpu")
 
         input_ids = kwargs_converted.get("input_ids")
         num_tokens = input_ids.shape[0] if input_ids is not None else -1
@@ -547,6 +558,10 @@ class TorchSpyreModelRunner(GPUModelRunner):
         # _make_buffer can place .gpu tensors on Spyre directly.
         self._spyre_device = device
 
+        from spyre_inference.v1.spec_decode.config import validate_dflash_config
+
+        validate_dflash_config(vllm_config)
+
         # Set by load_model: whether the pooler/classifier stay on Spyre.
         self._pooling_on_spyre = False
 
@@ -578,7 +593,9 @@ class TorchSpyreModelRunner(GPUModelRunner):
         # Spyre doesn't support all dtypes (int32, bool) natively.
         # _make_buffer (overridden below) already places .gpu on Spyre
         # via self._spyre_device regardless of self.device.
-        with _torch_cuda_wrapper():
+        from spyre_inference.v1.spec_decode.dflash import use_spyre_dflash_proposer
+
+        with _torch_cuda_wrapper(), use_spyre_dflash_proposer():
             super().__init__(vllm_config, torch.device("cpu"))
 
         # Keep self.device as CPU so buffer management (scatter, copy) stays
@@ -591,6 +608,12 @@ class TorchSpyreModelRunner(GPUModelRunner):
         self.sampler.topk_topp_sampler = SpyreTopKTopPSampler(
             self.sampler.logprobs_mode, self.sampler.use_fp64_gumbel
         )
+        if self.speculative_config is not None:
+            from spyre_inference.v1.spec_decode.rejection_sampler import (
+                install_rejection_sampler_kernels,
+            )
+
+            install_rejection_sampler_kernels()
 
         # Disable GPU-specific features (same as CPUModelRunner)
         self.use_cuda_graph = False
@@ -645,10 +668,17 @@ class TorchSpyreModelRunner(GPUModelRunner):
         if self.lora_config:
             raise NotImplementedError("LoRA adapters are not yet implemented and tested for Spyre.")
 
-        if hasattr(self, "drafter"):
+        if (
+            hasattr(self, "drafter")
+            and self.speculative_config is not None
+            and self.speculative_config.method not in ("ngram", "custom_class", "dflash")
+        ):
             raise NotImplementedError(
                 "Models with a drafter model are not yet implemented and tested for Spyre."
             )
+
+        if self.speculative_config and self.speculative_config.use_dflash():
+            self.drafter.load_model(self.model)
 
         # Restore original RoPE frequencies and attention scale corrupted by the
         # head_dim width override (no-op unless the platform padded head_dim).
@@ -664,6 +694,12 @@ class TorchSpyreModelRunner(GPUModelRunner):
 
         # Move layer weights to Spyre device.
         self.model.to(device=self._spyre_device)
+        if self.speculative_config and self.speculative_config.use_dflash():
+            from spyre_inference.v1.spec_decode.dflash import SpyreDFlashProposer
+
+            assert isinstance(self.drafter, SpyreDFlashProposer)
+            self.drafter.model.to(device=self._spyre_device)
+            self.drafter.model.prepare_for_spyre()
         for module in self.model.modules():
             if isinstance(module, SpyreConv2d):
                 module.process_weights_after_loading()
@@ -683,6 +719,8 @@ class TorchSpyreModelRunner(GPUModelRunner):
         # in OptimizedModule and breaks traversal.
         apply_multimodal_patches(self.model, self._spyre_device)
 
+        self._setup_eagle3_aux_hidden_state_outputs()
+
         # Compile for Spyre (no-op if enforce_eager=True)
         self._compile_for_spyre()
 
@@ -698,11 +736,58 @@ class TorchSpyreModelRunner(GPUModelRunner):
             logits_row_buckets=(
                 []
                 if bucketer is None
-                else logits_row_buckets(bucketer.bucket_sizes, self.max_num_reqs)
+                else logits_row_buckets(
+                    bucketer.bucket_sizes, self.max_num_reqs, self.num_spec_tokens
+                )
             ),
             shape_bucketer=bucketer,
             model_dtype=self._model_dtype(),
+            keep_aux_hidden_states_on_device=self.use_aux_hidden_state_outputs,
         )
+
+    def propose_draft_token_ids(
+        self,
+        scheduler_output,
+        sampled_token_ids,
+        sampling_metadata,
+        hidden_states,
+        sample_hidden_states,
+        aux_hidden_states,
+        spec_decode_metadata,
+        common_attn_metadata,
+        slot_mappings,
+    ):
+        assert self.speculative_config is not None
+        if self.speculative_config.use_dflash():
+            if not sampling_metadata.all_greedy:
+                raise ValueError("Spyre DFlash/XPress currently supports greedy target decoding")
+            return cast("SpyreDFlashProposer", self.drafter).propose_spyre(
+                sampled_token_ids,
+                aux_hidden_states,
+                self._get_positions(scheduler_output.total_num_scheduled_tokens),
+                spec_decode_metadata,
+                common_attn_metadata,
+            )
+        return super().propose_draft_token_ids(
+            scheduler_output,
+            sampled_token_ids,
+            sampling_metadata,
+            hidden_states,
+            sample_hidden_states,
+            aux_hidden_states,
+            spec_decode_metadata,
+            common_attn_metadata,
+            slot_mappings,
+        )
+
+    def _copy_draft_token_ids_to_cpu(self, scheduler_output, zeros_only=False):
+        # All supported proposers use host bookkeeping. In particular, the
+        # near-context-limit zero-draft path must not access CUDA streams.
+        if isinstance(self._draft_token_ids, torch.Tensor):
+            self.prev_num_spec_tokens = self._draft_token_ids.shape[1]
+            ids = convert(self._draft_token_ids, device="cpu")
+            self._draft_token_ids = torch.zeros_like(ids).tolist() if zeros_only else ids.tolist()
+        self._draft_token_req_ids = self.input_batch.req_ids.copy()
 
     @staticmethod
     def _model_has_spyre_fp8(model: nn.Module) -> bool:
@@ -918,7 +1003,7 @@ class TorchSpyreModelRunner(GPUModelRunner):
             bucket_sizes[0] if bucket_sizes else 0,
             bucket_sizes[-1] if bucket_sizes else 0,
         )
-        row_widths = logits_row_buckets(bucket_sizes, self.max_num_reqs)
+        row_widths = logits_row_buckets(bucket_sizes, self.max_num_reqs, self.num_spec_tokens)
         t0 = time.time()
         with _set_spyre_compilation_settings(self.vllm_config):
             # Compile largest bucket first: Inductor's internal caches benefit
@@ -926,10 +1011,12 @@ class TorchSpyreModelRunner(GPUModelRunner):
             # shapes compile faster via partial cache hits.
             widest_hidden_states = None
             for size in sorted(bucket_sizes, reverse=True):
-                _, last_hidden_states = self._dummy_run(size)
+                hidden_states, last_hidden_states = self._dummy_run(size)
                 self._warmup_input_embedding(size)
                 if widest_hidden_states is None:
-                    widest_hidden_states = last_hidden_states
+                    widest_hidden_states = (
+                        hidden_states if self.num_spec_tokens else last_hidden_states
+                    )
             # Row buckets, not one run per body bucket: the prefill bucket's token count
             # exceeds any reachable row count, so it would compile an unreachable width.
             if widest_hidden_states is not None:

@@ -37,6 +37,7 @@ _ADAPTED_MODULES = ("bert", "roberta")
 
 # Architectures adapted individually, for reasons that reach no further.
 _ADAPTED_ARCHS: dict[str, str] = {
+    "DFlashDraftModel": "spyre_inference.models.qwen3_dflash:SpyreDFlashQwen3ForCausalLM",
     # A Gemma4ForConditionalGeneration checkpoint needs no entry of its own:
     # apply_prelaunch_overrides rewrites it to this text-only backbone first.
     "Gemma4ForCausalLM": "spyre_inference.models.gemma4:SpyreGemma4ForCausalLM",
@@ -46,6 +47,12 @@ _ADAPTED_ARCHS: dict[str, str] = {
     "TransformersForCausalLM": (
         "spyre_inference.transformers_backend:SpyreTransformersForCausalLM"
     ),
+}
+
+# Public XPress checkpoints predate native registration in our pinned vLLM.
+_NEW_ARCHS = {
+    "Qwen3XPressModel": "spyre_inference.models.qwen3_dflash:SpyreDFlashQwen3ForCausalLM",
+    "DFlashQwen3XPressModel": "spyre_inference.models.qwen3_dflash:SpyreDFlashQwen3ForCausalLM",
 }
 
 
@@ -97,7 +104,7 @@ def register_models() -> None:
             "model adaptations need updating for this vLLM version."
         )
 
-    for arch, model_cls in models.items():
+    for arch, model_cls in (models | _NEW_ARCHS).items():
         ModelRegistry.register_model(arch, model_cls)
 
 

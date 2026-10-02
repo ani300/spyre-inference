@@ -143,6 +143,24 @@ def _recordable(bucketer, pages: int = NUM_PAGES) -> list[SpyreAttnBucket]:
     return [v for v in bucketer.variants() if v.num_blocks <= pages]
 
 
+def test_non_causal_draft_variant_keeps_future_block_tokens_visible(builder):
+    bucket = SpyreAttnBucket(1, 16)
+    bidirectional = builder.build_for_variant(bucket, causal=False)
+    causal = builder.build_for_variant(bucket, causal=True)
+    assert bidirectional.causal is False
+    assert not bidirectional.apply_causal_mask
+    assert causal.apply_causal_mask
+    visible = bidirectional.attention_mask_stacks[0][0, : bidirectional.max_query_len]
+    assert torch.all(visible == 0)
+    mask = causal.attention_mask_stacks[0]
+    assert mask[0, 0, -1] == torch.finfo(mask.dtype).min
+
+
+def test_attention_sinks_are_rejected(default_vllm_config):
+    with pytest.raises(NotImplementedError, match="attention sinks"):
+        SpyreAttentionImpl(NUM_HEADS, HEAD_SIZE, 1.0, NUM_KV_HEADS, sinks=torch.zeros(NUM_HEADS))
+
+
 def _record(impl, kv_cache, builder) -> int:
     """``record_graphs`` as the runner calls it; ``forward`` ignores the layer."""
     return impl.record_graphs(MagicMock(), kv_cache, builder)

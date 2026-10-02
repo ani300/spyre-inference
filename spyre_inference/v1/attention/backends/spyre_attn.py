@@ -262,6 +262,7 @@ class SpyreAttentionMetadata(AttentionMetadata):
     # Decode steps (max_query_len=1) don't need explicit causal masking because
     # the online softmax over KV pages naturally only attends to past tokens.
     apply_causal_mask: bool = False
+    causal: bool = True
 
     # Number of KV heads (for GQA).
     num_kv_heads: int = 0
@@ -1002,6 +1003,7 @@ class SpyreAttentionMetadataBuilder(AttentionMetadataBuilder[SpyreAttentionMetad
             block_size=self.block_size,
             slot_mapping=slot_mapping,
             apply_causal_mask=apply_causal_mask,
+            causal=causal,
             num_kv_heads=self.num_kv_heads,
             num_heads=self.num_heads,
             attention_mask_stacks=attention_mask_stacks,
@@ -1020,7 +1022,9 @@ class SpyreAttentionMetadataBuilder(AttentionMetadataBuilder[SpyreAttentionMetad
             mask_by_chunk_cpu=mask_by_chunk_cpu,
         )
 
-    def build_for_variant(self, bucket: SpyreAttnBucket) -> SpyreAttentionMetadata:
+    def build_for_variant(
+        self, bucket: SpyreAttnBucket, causal: bool = True
+    ) -> SpyreAttentionMetadata:
         """Metadata for the one-sequence batch that runs ``bucket`` through the per-seq loop.
 
         A variant stands for every request of its shape, prefill or decode alike: the loop
@@ -1043,7 +1047,7 @@ class SpyreAttentionMetadataBuilder(AttentionMetadataBuilder[SpyreAttentionMetad
                 max_seq_len=kv_len,
                 block_table_tensor=torch.zeros(1, bucket.num_blocks, dtype=torch.int32),
                 slot_mapping=torch.zeros(query_len, dtype=torch.int64),
-                causal=True,
+                causal=causal,
             ),
             per_seq_only=True,
         )
@@ -1102,6 +1106,10 @@ class SpyreAttentionBackend(AttentionBackend):
         "float16",
         "bfloat16",
     ]
+
+    @classmethod
+    def supports_non_causal(cls) -> bool:
+        return True
 
     @staticmethod
     def get_supported_kernel_block_sizes() -> list[int | MultipleOf]:
@@ -1172,7 +1180,10 @@ class SpyreAttentionImpl(AttentionImpl[SpyreAttentionMetadata]):
         logits_soft_cap: float | None = None,
         attn_type: str = AttentionType.DECODER,
         kv_sharing_target_layer_name: str | None = None,
+        sinks: torch.Tensor | None = None,
     ) -> None:
+        if sinks is not None:
+            raise NotImplementedError("Spyre attention does not support attention sinks")
         self.num_heads = num_heads
         self.head_size = head_size
         self.scale = float(scale)
@@ -1480,7 +1491,9 @@ class SpyreAttentionImpl(AttentionImpl[SpyreAttentionMetadata]):
         recorded: "set[SpyreAttnBucket]",
     ) -> "SpyreAttnBucket | None":
         """Trace the kernel ``bucket`` needs; None if ``build()`` realized one already traced."""
-        attn_metadata = builder.build_for_variant(bucket)
+        attn_metadata = builder.build_for_variant(
+            bucket, causal=bool(getattr(layer, "spyre_causal", True))
+        )
         assert attn_metadata.attention_mask_stacks is not None
         realized = SpyreAttnBucket(
             num_blocks=int(attn_metadata.attention_mask_stacks[0].shape[0]),

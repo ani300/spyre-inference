@@ -199,8 +199,10 @@ class TorchSpyrePlatform(CpuPlatform):
         @functools.wraps(create_model_config)
         def _spyre_create_model_config(self):
             from spyre_inference.models import apply_prelaunch_overrides
+            from spyre_inference.v1.spec_decode.config import normalize_speculative_config
 
             apply_prelaunch_overrides(self)
+            normalize_speculative_config(self)
             return create_model_config(self)
 
         EngineArgs.create_model_config = _spyre_create_model_config  # ty: ignore[invalid-assignment]
