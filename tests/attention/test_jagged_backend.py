@@ -30,7 +30,7 @@ from spyre_inference.v1.attention.jagged_plan import jagged_plan_variants
 from spyre_inference.v1.attention.ops.jagged_decode_attn import jagged_decode_attn_kernel
 from spyre_inference.v1.attention.ops.jagged_tile_attn import jagged_tile_attn_kernel
 
-pytestmark = pytest.mark.attention
+pytestmark = [pytest.mark.attention, pytest.mark.usefixtures("counted_spyre_loops")]
 
 
 def _cpu_kernel(function, q, k, v, *args, **kwargs):
