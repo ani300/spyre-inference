@@ -86,6 +86,50 @@ backend, so cross-backend logits alone do not isolate attention error. The
 records the current numerical limitations. Use common compiled model math and
 history for attribution and independent references for accuracy.
 
+## XPress request latency
+
+`xpress_latency.py` measures complete serial requests through the vLLM engine,
+including scheduling, target verification, draft proposals and sampling. It uses
+the pinned Qwen3-8B target and XPress checkpoint from the local Hugging Face cache,
+FP16, TP=1, C512 and six refinement passes. Each request generates 64 tokens with
+greedy sampling and EOS ignored. The three prompts have 32, 127 and 383 tokens;
+they repeat the same prose and have high speculative acceptance, so this is a
+controlled short-context comparison rather than a production workload sample.
+
+Use the same idle card, source revisions, lower stack and compiler cache for both
+modes. Run each invocation to completion before starting the next. Source the
+workspace development environment and select the intended worktrees first.
+
+```bash
+SPYRE_DEVICES=2 uv run --no-sync python scripts/microbench/xpress_latency.py \
+    --jagged 0 --repeats 2 --output regular-1.json
+SPYRE_DEVICES=2 uv run --no-sync python scripts/microbench/xpress_latency.py \
+    --jagged 1 --repeats 2 --output jagged-1.json
+```
+
+Repeat in reverse order, saving `jagged-2.json` and `regular-2.json`, then combine:
+
+```bash
+python scripts/microbench/summarize_xpress_latency.py \
+    --group regular=regular-1.json --group regular=regular-2.json \
+    --group jagged=jagged-1.json --group jagged=jagged-2.json \
+    --output comparison.json
+```
+
+Initialization and one warmup request per prompt are excluded. Worker diagnostics
+and JSON writes stay outside timed requests, and no KV-cache snapshots are taken.
+The harness enables callable serialization for its own local worker diagnostics.
+It records first-token time, effective decode time per token, arrival bursts,
+token IDs and public acceptance counters. Effective TPOT spreads elapsed decode
+time across tokens; speculative tokens arrive in bursts. Acceptance counters can
+include tokens clipped by the output-length limit.
+
+The comparison reports whether tokens and acceptance counts match. A latency
+ratio with different work is an observed request-time difference, not an isolated
+attention speedup. Host copy and dispatch intervals include pending device work;
+they do not provide exclusive kernel durations or DMA bandwidth. Each JSON file
+has a `complete` flag, and the summarizer rejects incomplete runs.
+
 ## Run
 
 ```bash
