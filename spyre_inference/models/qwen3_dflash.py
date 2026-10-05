@@ -78,23 +78,28 @@ class SpyreDFlashQwen3ForCausalLM(DFlashQwen3ForCausalLM):
             attention.attn.spyre_causal = attention.causal  # ty: ignore[invalid-assignment]
         self.xpress_head = None
         self.xpress_num_passes = 0
+        self.xpress_topc = 0
         self.device_to_host_seconds = 0.0
         self.host_argmax_seconds = 0.0
+        self.host_topk_seconds = 0.0
         self.host_to_device_seconds = 0.0
+        self.candidate_gather_seconds = 0.0
+        self.candidate_transfer_bytes = 0
         self.refiner_seconds = 0.0
         self.logits_seconds = 0.0
         self.selection_calls = 0
         self.logits_transfer_bytes = 0
         if hasattr(self.config, "xpress_rank"):
+            self.xpress_topc = getattr(self.config, "xpress_topc", 512)
             self.xpress_head = XPressRefinerHead(
                 self.config.vocab_size,
                 self.config.hidden_size,
                 self.config.xpress_block_size,
                 self.config.xpress_rank,
                 self.config.xpress_mlp_hidden,
+                topc=self.xpress_topc,
             )
-            passes = vllm_config.additional_config.get("spyre_xpress", {}).get("num_passes")
-            self.xpress_num_passes = self.config.xpress_num_passes if passes is None else passes
+            self.xpress_num_passes = getattr(self.config, "xpress_num_passes", 6)
 
     def load_weights(self, weights):
         weights = dict(weights)
@@ -118,11 +123,13 @@ class SpyreDFlashQwen3ForCausalLM(DFlashQwen3ForCausalLM):
         head = self.xpress_head
         if head is not None:
             head.prepare_for_spyre()
-            self._hidden_cache = torch.compile(head.hidden_cache, fullgraph=True, dynamic=False)
-            self._refine = torch.compile(
-                lambda base, previous, cache: base + head.refine_bias(previous, cache),
-                fullgraph=True,
-                dynamic=False,
+            self._hidden_cache = torch.compile(
+                head.project_hidden_cache, fullgraph=True, dynamic=False
+            )
+            self._refine = torch.compile(head.refine_full, fullgraph=True, dynamic=False)
+            self._gather_readout = torch.compile(head.gather_readout, fullgraph=True, dynamic=False)
+            self._refine_candidates = torch.compile(
+                head.refine_candidates, fullgraph=True, dynamic=False
             )
 
     def combine_hidden_states(self, hidden_states):
@@ -133,7 +140,7 @@ class SpyreDFlashQwen3ForCausalLM(DFlashQwen3ForCausalLM):
         method = cast(SpyreUnquantizedLMHeadMethod, self.lm_head.quant_method)
         return method.apply(self.lm_head, hidden_states)
 
-    def _select_on_cpu(self, logits):
+    def _copy_logits_to_cpu(self, logits):
         # aten.argmax falls back on this stack. topk returns inexact FP16
         # indices and has different tie ordering even with FP32 indices.
         started = time.perf_counter()
@@ -142,8 +149,13 @@ class SpyreDFlashQwen3ForCausalLM(DFlashQwen3ForCausalLM):
         host_logits = logits.to(device="cpu", dtype=torch.float32)
         self.device_to_host_seconds += time.perf_counter() - started
         self.logits_transfer_bytes += host_logits.numel() * host_logits.element_size()
+        return host_logits
+
+    def _argmax_on_cpu(self, host_logits, candidates=None):
         started = time.perf_counter()
-        result = host_logits[:, 1:].argmax(-1)
+        result = host_logits.argmax(-1)
+        if candidates is not None:
+            result = candidates.gather(-1, result.unsqueeze(-1)).squeeze(-1)
         self.host_argmax_seconds += time.perf_counter() - started
         self.selection_calls += 1
         return result
@@ -152,11 +164,28 @@ class SpyreDFlashQwen3ForCausalLM(DFlashQwen3ForCausalLM):
         started = time.perf_counter()
         base = self.compute_device_logits(hidden_states).unsqueeze(0)
         self.logits_seconds += time.perf_counter() - started
-        draft = self._select_on_cpu(base)
+        host_base = self._copy_logits_to_cpu(base)[:, 1:]
+        draft = self._argmax_on_cpu(host_base)
         if self.xpress_head is not None and self.xpress_num_passes:
             started = time.perf_counter()
             cache = self._hidden_cache(hidden_states.unsqueeze(0))
             self.refiner_seconds += time.perf_counter() - started
+            candidates = readout = None
+            base = base[:, 1:]
+            if self.xpress_topc:
+                started = time.perf_counter()
+                base_c, candidates = host_base.topk(
+                    min(self.xpress_topc, host_base.shape[-1]), dim=-1
+                )
+                self.host_topk_seconds += time.perf_counter() - started
+                started = time.perf_counter()
+                candidate_ids = convert(candidates, device=hidden_states.device)
+                base = convert(base_c, device=hidden_states.device, dtype=hidden_states.dtype)
+                self.host_to_device_seconds += time.perf_counter() - started
+                self.candidate_transfer_bytes += candidates.numel() * 4 + base.numel() * 2
+                started = time.perf_counter()
+                readout = self._gather_readout(candidate_ids)
+                self.candidate_gather_seconds += time.perf_counter() - started
             for _ in range(self.xpress_num_passes):
                 # Match the pinned serving PR: the anchor is its own predecessor.
                 previous = torch.cat(
@@ -166,7 +195,11 @@ class SpyreDFlashQwen3ForCausalLM(DFlashQwen3ForCausalLM):
                 previous = convert(previous, device=hidden_states.device)
                 self.host_to_device_seconds += time.perf_counter() - started
                 started = time.perf_counter()
-                logits = self._refine(base, previous, cache)
+                logits = (
+                    self._refine(base, previous, cache)
+                    if candidates is None
+                    else self._refine_candidates(base, previous, cache, readout)
+                )
                 self.refiner_seconds += time.perf_counter() - started
-                draft = self._select_on_cpu(logits)
+                draft = self._argmax_on_cpu(self._copy_logits_to_cpu(logits), candidates)
         return draft.tolist()

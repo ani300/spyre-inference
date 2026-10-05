@@ -87,12 +87,16 @@ an instruction-fetch page fault. The same failure occurs in a small matmul and
 the original hidden projection, on multiple available cards, after rebuilding
 the private torch-spyre checkout against the workspace lower stack, with a fresh
 compile cache, with default loop unrolling, and with a control Python environment.
+A final run after all four cards became free reproduced the same failure.
 No candidate gather or jagged attention is required to reproduce it. The root
 cause has not been established. Full and shortlist refinement, combined E2E,
 and new device latency measurements remain pending that baseline repair.
 
-Current results: 101 speculative-decoding CPU tests and 136 jagged CPU tests
-passed; 157 device cases were explicitly deselected in the latter run. Repository
+Current results: 101 speculative-decoding CPU tests passed on the standalone
+branch and again on the combined branch with jagged attention enabled. All 136
+jagged CPU tests passed; 157 device cases were explicitly deselected in that
+run. Three real vLLM `EngineArgs` checks passed using the cached model configs:
+default shortlist, full-vocabulary override, and legacy alias. Repository
 formatting, lint and type checks passed. The CPU tests exercise configuration precedence, checkpoint loading,
 unfolded-refiner equivalence, fixed-shortlist recurrence, the actual serving
 selection loop and its score payload, and jagged causal/noncausal dispatch. CPU
@@ -101,8 +105,9 @@ numerical discrepancies also remain separate validation gates.
 
 Local evidence is retained under `/mnt/home/spyre/xpress-jagged-validation`:
 `pinned-sources/manifest.json`, `torch-spyre-build.log`,
-`cpu-xpress-pinned.log`, `cpu-jagged-registered.log`, `head-probe.json`,
-`sanity_probe.py`, and `sanity-card1.log`. The head JSON is partial and contains
+`cpu-xpress-pinned.log`, `cpu-spec-combined.log`, `cpu-jagged-registered.log`,
+`config-smoke.json`, `current-stack.json`, `head-probe.json`,
+`sanity_probe.py`, `sanity-card1.log`, and `sanity-idle-cards.log`. The head JSON is partial and contains
 only K=0. Historical measurements are in
 `/mnt/home/spyre/xpress-validation/e2e4/test_qwen3_xpress_verification0/xpress-validation.json`
 and `target-baseline.json`. The evolving investigation is preserved at

@@ -5,7 +5,7 @@ The experimental XPress path supports the Qwen3 text target with the published
 refines the proposed block, then uses vLLM's target verification and output
 processing. Speculation is opt-in.
 
-The first supported configuration uses compiled execution, unquantized FP16
+The current scope is compiled execution, unquantized FP16
 target and draft weights, TP=1, PP=1, one active request, greedy target sampling,
 and disabled prefix caching. The published
 checkpoint has a fixed 16-position block: one anchor and 15 draft tokens.
@@ -32,18 +32,30 @@ uv run --no-sync vllm serve Qwen/Qwen3-8B \
   --max-num-seqs 1 --max-model-len 512 --max-num-batched-tokens 64 \
   --no-enable-prefix-caching \
   --compilation-config '{"compile_sizes": [1, 16, 64]}' \
-  --speculative-config '{"method": "xpress", "model": "UIUC-SSAIL/Qwen3-8B-XPress-b16", "revision": "f098ab5bbe4fce37c4a1093266bcd8ad15df5cb5", "num_speculative_tokens": 15, "xpress_num_passes": 6}'
+  --speculative-config '{"method": "dflash", "model": "UIUC-SSAIL/Qwen3-8B-XPress-b16", "revision": "f098ab5bbe4fce37c4a1093266bcd8ad15df5cb5", "num_speculative_tokens": 15, "xpress_topc": 512}'
 ```
 
 Send requests with `temperature=0`. The same `speculative_config` dictionary
 works with `vllm.LLM`. Set `xpress_num_passes` to `0` to run the same DFlash
-backbone without refinement. Omit `speculative_config` for ordinary decoding.
+backbone without refinement. Set `xpress_topc` to `0` for full-vocabulary
+refinement. Omit `speculative_config` for ordinary decoding.
 Keep prompt formatting, thinking mode, output limits, dtype, and context length
 identical when comparing these modes.
 
-This adapter uses vLLM 0.28's legacy DFlash runner contract. It translates the
-`xpress` method before vLLM constructs its speculative configuration; it does
-not require the newer GPU runner from the upstream XPress PR.
+This adapter uses vLLM 0.28's legacy DFlash runner contract. Like the upstream PR,
+`method="dflash"` detects XPress from the checkpoint architecture. The previous
+`method="xpress"` spelling remains an alias. The adapter transports XPress
+options through `additional_config`, since vLLM 0.28 predates those fields.
+It does not require the newer GPU runner from the upstream PR.
+
+The shortlist size defaults to the checkpoint's `xpress_topc`, or 512 when
+absent; an explicit speculative-config value takes precedence. Values must be
+integers between zero and the vocabulary size. Each predicted position gets
+its own top-C candidates from the initial base logits. Those candidates and
+their readout weights stay fixed for every Jacobi pass. Refinement can no
+longer select a token outside that initial set. Target verification still
+controls the accepted output. Equal scores select the first candidate in the
+CPU top-k ordering; that ordering can differ from upstream's GPU top-k kernel.
 
 ## Checkpoint contract
 
@@ -93,13 +105,23 @@ A Gemma target would also require a compatible drafter and model adapter.
 
 ## Precision and performance boundaries
 
-The backbone and refiner math are compiled on Spyre. Each proposal selection
-explicitly transfers logits to CPU for first-index `argmax`, then transfers the
-chosen IDs back for the next pass. The model records D2H time, CPU selection
-time, ID H2D time, refiner time, readout time, and transferred bytes. The proposer
+The backbone and refiner math are compiled on Spyre. The hidden-side projection
+of the refiner's `in_proj` is computed once per proposal. With top-C enabled,
+the initial full-vocabulary logits go to CPU once for argmax and top-k. The
+candidate IDs and scores are uploaded once, and their readout weight rows are
+gathered on Spyre once. Each pass computes only candidate scores, transfers
+those scores to CPU for argmax, and uploads the selected token IDs for the next
+pass. With top-C=0, each pass still transfers full-vocabulary scores, restricted
+to the 15 predicted rows.
+
+The model records D2H time, CPU argmax and top-k time, H2D time, candidate gather,
+refiner and readout time, and transferred bytes. `logits_transfer_bytes` counts
+the logical FP32 host payload, not measured PCIe traffic;
+`candidate_transfer_bytes` estimates uploaded INT32 IDs and FP16 scores. The proposer
 also records context projection and draft-forward time. These counters are
 available through the model runner for profiling; they are not a public metrics
-API.
+API. Host wall-clock intervals are diagnostic; asynchronous device work can be
+charged to the next transfer, so these counters are not exclusive kernel times.
 
 This boundary is intentional on the validated stack: device `argmax` falls back,
 FP16 `topk` corrupts large token IDs, and FP32 `topk` uses a different tie order.
@@ -117,10 +139,11 @@ verification remains responsible for the output. Compare numerical errors and
 token margins as well as proposal IDs.
 
 No production speedup is claimed. Measure ordinary decoding, K=0, and K=6
+with both top-C=0 and top-C=512
 after warmup on the same workload. Report accepted tokens per round alongside
-draft, refinement, verification, transfer, and host time. Repeated full-vocabulary
-transfers currently dominate refinement, making exact device token selection
-the main optimization candidate.
+draft, refinement, verification, transfer, and host time. The shortlist reduces
+per-pass readout and D2H volume, but the initial vocabulary transfer, CPU top-k,
+and six synchronized selection round trips remain optimization candidates.
 
 ## Validation
 
@@ -150,12 +173,27 @@ recorded separately because FP16 block and single-token execution can diverge
 numerically. Use a separate engine without `speculative_config` when measuring
 ordinary decoding's latency and memory.
 
-Run Spyre tests serially. CPU-only green tests do not establish device support.
-The integration was brought up against torch-spyre
+Run Spyre tests serially, selecting a free card with `SPYRE_DEVICES`. CPU-only
+green tests do not establish device support. The original full-vocabulary
+integration was brought up against torch-spyre
 `24c7b8c568c287315f6aa00450580be674b71285`, hf-adapters
 `a138ad4d6b65a57b99005ced33f91b4f1848d407`, Torch `2.13.0+cpu`,
 vLLM `0.28.0+empty`, and Transformers `5.16.1`.
 
+The top-C update follows vLLM PR #54448 at
+`c768e7b6b1bf423bf276cf61b46a4b76f5ec7974`. New device validation on October 5
+used a fresh local build of torch-spyre PR #5086 at
+`59bd609efcf9cf80bbbba50daf9fdd48ddb36e38`. Input transfers and K=0 selection
+from precomputed logits passed, but even a standalone compiled 64-by-64 addition
+failed with `ComputeHardwareError 0x7b1b` and an instruction-fetch page fault.
+The failure reproduced on multiple free cards and with a control Python
+environment. Its root cause is unresolved. The new refinement kernels and
+top-C end-to-end generation therefore still require device validation; the
+historical full-vocabulary results do not cover this update.
+
+Set `SPYRE_XPRESS_TEST_TOPC=0` or `512` when running the hardware test to check
+both scoring paths, using a fresh artifact directory for each invocation.
+
 References: [vLLM PR #54448](https://github.com/vllm-project/vllm/pull/54448),
-[pinned serving head](https://github.com/vllm-project/vllm/blob/15ba199f070f4bb4d1d394108525b4101117c067/vllm/model_executor/models/qwen3_xpress.py),
+[pinned serving head](https://github.com/vllm-project/vllm/blob/c768e7b6b1bf423bf276cf61b46a4b76f5ec7974/vllm/model_executor/models/qwen3_xpress.py),
 [pinned training branch](https://github.com/ZKBig/speculators/tree/72fe5660e81d14c523961a186623243e3d3f4ae4).

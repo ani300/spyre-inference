@@ -125,11 +125,12 @@ def test_qwen3_xpress_verification_and_generation(monkeypatch, tmp_path, record_
         compilation_config={"compile_sizes": [1, 16, 64]},
         worker_cls="xpress_validation_worker.ValidationWorker",
         speculative_config=dict(
-            method="xpress",
+            method="dflash",
             model=DRAFT,
             revision=DRAFT_REVISION,
             num_speculative_tokens=15,
             xpress_num_passes=6,
+            xpress_topc=int(os.environ.get("SPYRE_XPRESS_TEST_TOPC", "512")),
         ),
     )
     tokenizer = engine.get_tokenizer()
