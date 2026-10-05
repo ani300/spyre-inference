@@ -22,6 +22,21 @@ from spyre_inference.v1.spec_decode.checkpoint import validate_dflash_weights
 from spyre_inference.v1.spec_decode.xpress_head import XPressRefinerHead
 
 
+def _select_with_feedback(scores, candidate_parts, order, previous):
+    maxima = scores.amax(dim=-1, keepdim=True)
+    first = torch.where(scores == maxima, order, scores.shape[-1]).amin(dim=-1, keepdim=True)
+    # Two base-512 digits preserve vocabulary IDs without widening the mask,
+    # whose FP32 layout cannot be combined with a host-uploaded ID table.
+    low = torch.where(order == first, candidate_parts[0], 0.0).sum(dim=-1)
+    high = torch.where(order == first, candidate_parts[1], 0.0).sum(dim=-1)
+    draft = (low.float() + high.float() * 512).to(torch.int32)
+    # Whole int32 sticks let concat write token rows without an offset-two
+    # mutation inside a stick. Keep this layout from the initial upload.
+    tail = draft.reshape(-1, 1)[:-1].expand(-1, 32)
+    previous = torch.cat((previous[:2], tail), dim=0)
+    return draft, previous
+
+
 def _project_context(attention, context, positions):
     kv = context @ attention._context_kv_weight_t
     key, value = kv.split(attention.kv_size, dim=-1)
@@ -97,6 +112,11 @@ class SpyreDFlashQwen3ForCausalLM(DFlashQwen3ForCausalLM):
         self.logits_seconds = 0.0
         self.selection_calls = 0
         self.logits_transfer_bytes = 0
+        self.device_selection_calls = 0
+        self.device_selection_seconds = 0.0
+        self.proposal_id_transfer_bytes = 0
+        self._device_feedback_enabled = False
+        self.register_buffer("_feedback_order", None, persistent=False)
         if hasattr(self.config, "xpress_rank"):
             self.xpress_topc = getattr(self.config, "xpress_topc", 512)
             self.xpress_head = XPressRefinerHead(
@@ -139,6 +159,18 @@ class SpyreDFlashQwen3ForCausalLM(DFlashQwen3ForCausalLM):
             self._refine_candidates = torch.compile(
                 head.refine_candidates, fullgraph=True, dynamic=False
             )
+            self._device_feedback_enabled = (
+                head.block_size == 16
+                and self.xpress_topc == 512
+                and 512 <= self.config.vocab_size <= 512 * 512
+            )
+            if self._device_feedback_enabled:
+                self._feedback_order = torch.arange(512, dtype=torch.float16).to(
+                    head.w1.weight.device
+                )
+                self._select_with_feedback = torch.compile(
+                    _select_with_feedback, fullgraph=True, dynamic=False
+                )
 
     def combine_hidden_states(self, hidden_states):
         return self._combine(hidden_states)
@@ -174,6 +206,7 @@ class SpyreDFlashQwen3ForCausalLM(DFlashQwen3ForCausalLM):
         self.logits_seconds += time.perf_counter() - started
         host_base = self._copy_logits_to_cpu(base)[:, 1:]
         draft = self._argmax_on_cpu(host_base)
+        device_feedback = False
         if self.xpress_head is not None and self.xpress_num_passes:
             started = time.perf_counter()
             cache = self._hidden_cache(hidden_states.unsqueeze(0))
@@ -194,14 +227,38 @@ class SpyreDFlashQwen3ForCausalLM(DFlashQwen3ForCausalLM):
                 started = time.perf_counter()
                 readout = self._gather_readout(candidate_ids)
                 self.candidate_gather_seconds += time.perf_counter() - started
-            for _ in range(self.xpress_num_passes):
-                # Match the pinned serving PR: the anchor is its own predecessor.
+            device_feedback = getattr(self, "_device_feedback_enabled", False) and (
+                self.xpress_topc == 512
+            )
+            if device_feedback:
+                assert candidates is not None
+                started = time.perf_counter()
+                parts = convert(
+                    torch.stack((candidates % 512, candidates // 512)),
+                    hidden_states.device,
+                    dtype=hidden_states.dtype,
+                )
                 previous = torch.cat(
                     (anchor_ids[:, None], anchor_ids[:, None], draft[:, :-1]), dim=1
                 )
-                started = time.perf_counter()
-                previous = convert(previous, device=hidden_states.device)
+                feedback = convert(
+                    previous.reshape(-1, 1).expand(-1, 32).contiguous(),
+                    hidden_states.device,
+                    dtype=torch.int32,
+                )
                 self.host_to_device_seconds += time.perf_counter() - started
+                self.candidate_transfer_bytes += parts.numel() * parts.element_size()
+            for _ in range(self.xpress_num_passes):
+                # Match the pinned serving PR: the anchor is its own predecessor.
+                if device_feedback:
+                    previous = feedback[:, 0].view(1, -1)
+                else:
+                    previous = torch.cat(
+                        (anchor_ids[:, None], anchor_ids[:, None], draft[:, :-1]), dim=1
+                    )
+                    started = time.perf_counter()
+                    previous = convert(previous, device=hidden_states.device)
+                    self.host_to_device_seconds += time.perf_counter() - started
                 started = time.perf_counter()
                 logits = (
                     self._refine(base, previous, cache)
@@ -209,5 +266,18 @@ class SpyreDFlashQwen3ForCausalLM(DFlashQwen3ForCausalLM):
                     else self._refine_candidates(base, previous, cache, readout)
                 )
                 self.refiner_seconds += time.perf_counter() - started
-                draft = self._argmax_on_cpu(self._copy_logits_to_cpu(logits), candidates)
+                if device_feedback:
+                    started = time.perf_counter()
+                    draft, feedback = self._select_with_feedback(
+                        logits, parts, self._feedback_order, feedback
+                    )
+                    self.device_selection_seconds += time.perf_counter() - started
+                    self.device_selection_calls += 1
+                else:
+                    draft = self._argmax_on_cpu(self._copy_logits_to_cpu(logits), candidates)
+        if device_feedback:
+            started = time.perf_counter()
+            draft = draft.cpu()
+            self.device_to_host_seconds += time.perf_counter() - started
+            self.proposal_id_transfer_bytes += draft.numel() * draft.element_size()
         return draft.tolist()

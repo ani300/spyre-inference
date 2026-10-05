@@ -140,6 +140,9 @@ class ValidationWorker(TorchSpyreWorker):
                     "refiner_seconds",
                     "logits_seconds",
                     "logits_transfer_bytes",
+                    "device_selection_calls",
+                    "device_selection_seconds",
+                    "proposal_id_transfer_bytes",
                 )
             },
         )

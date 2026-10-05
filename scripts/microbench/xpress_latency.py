@@ -63,6 +63,9 @@ def _worker_state(worker, prepare=False):
             "selection_calls",
             "logits_transfer_bytes",
             "candidate_transfer_bytes",
+            "device_selection_calls",
+            "device_selection_seconds",
+            "proposal_id_transfer_bytes",
         )
     }
     return {

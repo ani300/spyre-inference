@@ -1,13 +1,18 @@
 # Copyright 2026 The Spyre-Inference Authors.
 # SPDX-License-Identifier: Apache-2.0
 
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 
 import pytest
 import torch
 
-from spyre_inference.models.qwen3_dflash import SpyreDFlashQwen3Model
+from spyre_inference.models.qwen3_dflash import (
+    SpyreDFlashQwen3ForCausalLM,
+    SpyreDFlashQwen3Model,
+    _select_with_feedback,
+)
 from spyre_inference.v1.spec_decode.dflash import SpyreDFlashProposer
+from spyre_inference.v1.spec_decode.xpress_head import XPressRefinerHead
 from spyre_inference.v1.worker.spyre_model_runner import TorchSpyreModelRunner
 
 
@@ -123,3 +128,74 @@ def test_context_projection_packs_live_transposed_weights_without_query_columns(
         for result, weight in zip(actual, reference):
             expected = torch.nn.functional.linear(context, weight).view(rows, 2, 64)
             torch.testing.assert_close(result, expected)
+
+
+@pytest.mark.parametrize("kind", ["random", "all_equal", "negative", "edge_ties"])
+def test_device_feedback_selection_keeps_ties_large_ids_and_anchors(kind):
+    torch.manual_seed(39)
+    scores = torch.randn(1, 15, 512).half()
+    if kind == "all_equal":
+        scores.zero_()
+    elif kind == "negative":
+        scores = -torch.arange(512).view(1, 1, -1).expand(1, 15, -1).half()
+    elif kind == "edge_ties":
+        scores.fill_(-4)
+        for row in range(15):
+            index = (31, 32, 63, 64, 255, 256, 510, 511)[row % 8]
+            scores[0, row, index] = scores[0, row, 511] = 9
+    candidates = torch.randint(0, 262144, scores.shape)
+    candidates[..., :8] = torch.tensor([0, 2049, 4097, 65537, 131073, 151935, 262143, 32769])
+    parts = torch.stack((candidates % 512, candidates // 512)).half()
+    previous = torch.full((16, 32), 151935, dtype=torch.int32)
+    draft, feedback = _select_with_feedback(scores, parts, torch.arange(512).half(), previous)
+    expected = candidates.gather(-1, scores.argmax(-1, keepdim=True)).squeeze(-1)
+    assert draft.tolist() == expected.tolist()
+    expected_previous = torch.cat((previous[:2, 0], expected[0, :-1])).int()
+    torch.testing.assert_close(feedback, expected_previous[:, None].expand(16, 32))
+
+
+@pytest.mark.parametrize("passes", [1, 6])
+def test_device_feedback_serving_loop_copies_only_base_scores_and_final_ids(passes):
+    torch.manual_seed(81)
+    head = XPressRefinerHead(1031, 128, 16, rank=64, mlp_hidden=128, topc=512).eval()
+    hidden, base = torch.randn(16, 128), torch.randn(16, 1031)
+    anchor = torch.tensor([1025])
+    model = SimpleNamespace(
+        xpress_head=head,
+        xpress_num_passes=passes,
+        xpress_topc=512,
+        _device_feedback_enabled=True,
+        _feedback_order=torch.arange(512).half(),
+        compute_device_logits=lambda _: base,
+        _hidden_cache=head.project_hidden_cache,
+        _refine=head.refine_full,
+        _gather_readout=head.gather_readout,
+        _refine_candidates=head.refine_candidates,
+        _select_with_feedback=_select_with_feedback,
+    )
+    for name in (
+        "device_to_host_seconds",
+        "host_argmax_seconds",
+        "host_topk_seconds",
+        "host_to_device_seconds",
+        "candidate_gather_seconds",
+        "candidate_transfer_bytes",
+        "refiner_seconds",
+        "logits_seconds",
+        "selection_calls",
+        "logits_transfer_bytes",
+        "device_selection_calls",
+        "device_selection_seconds",
+        "proposal_id_transfer_bytes",
+    ):
+        setattr(model, name, 0)
+    for name in ("_copy_logits_to_cpu", "_argmax_on_cpu"):
+        setattr(model, name, MethodType(getattr(SpyreDFlashQwen3ForCausalLM, name), model))
+    with torch.inference_mode():
+        expected = head(base[None], hidden[None], anchor, anchor, passes).tolist()
+        actual = SpyreDFlashQwen3ForCausalLM.propose_block(model, hidden, anchor)
+    assert actual == expected
+    assert model.selection_calls == 1
+    assert model.device_selection_calls == passes
+    assert model.logits_transfer_bytes == base.numel() * 4
+    assert model.proposal_id_transfer_bytes == 15 * 4
