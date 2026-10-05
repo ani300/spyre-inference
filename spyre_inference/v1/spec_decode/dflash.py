@@ -101,7 +101,10 @@ class SpyreDFlashProposer(DFlashProposer):
         target_positions,
         spec_decode_metadata,
         common_attn_metadata,
+        *,
+        skip_proposal: bool = False,
     ):
+        """Commit accepted context even when the request needs no further proposals."""
         started = time.perf_counter()
         if len(sampled_token_ids) != 1 or aux_hidden_states is None:
             raise ValueError("Spyre DFlash needs one request and its auxiliary hidden states")
@@ -123,7 +126,7 @@ class SpyreDFlashProposer(DFlashProposer):
         )
         self.context_tokens += valid
         self.context_seconds += time.perf_counter() - started
-        if not sampled:
+        if not sampled or skip_proposal:
             return [[]]
 
         block = self.draft_block_size

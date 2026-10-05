@@ -23,10 +23,8 @@ from spyre_inference.v1.spec_decode.xpress_head import XPressRefinerHead
 
 
 def _project_context(attention, context, positions):
-    # Spyre transposes qkv_proj weights after loading. Use its live linear
-    # method instead of the upstream fused buffer built from raw CPU weights.
-    qkv, _ = attention.qkv_proj(context)
-    _, key, value = qkv.split([attention.q_size, attention.kv_size, attention.kv_size], dim=-1)
+    kv = context @ attention._context_kv_weight_t
+    key, value = kv.split(attention.kv_size, dim=-1)
     key = attention.k_norm(key.view(-1, attention.num_kv_heads, attention.head_dim))
     key, _ = attention.rotary_emb(positions, key.flatten(1), None)
     return key.view(-1, attention.num_kv_heads, attention.head_dim), value.view(
@@ -42,6 +40,16 @@ class SpyreDFlashQwen3Model(DFlashQwen3Model):
         pass
 
     def prepare_for_spyre(self) -> None:
+        for layer in self.layers:
+            attention = cast(DFlashQwen3DecoderLayer, layer).self_attn
+            # The live unquantized weight is [input, Q|K|V] after Spyre's
+            # loading transform. Context needs only K/V; pack it once on load.
+            weight_t = cast(torch.Tensor, attention.qkv_proj.weight)
+            attention.register_buffer(
+                "_context_kv_weight_t",
+                weight_t.detach().cpu()[:, attention.q_size :].contiguous().to(weight_t.device),
+                persistent=False,
+            )
         self._context_norm = torch.compile(self.hidden_norm, fullgraph=True, dynamic=False)
         self._context_project = torch.compile(_project_context, fullgraph=True, dynamic=False)
 

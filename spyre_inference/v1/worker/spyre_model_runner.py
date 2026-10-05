@@ -761,12 +761,20 @@ class TorchSpyreModelRunner(GPUModelRunner):
         if self.speculative_config.use_dflash():
             if not sampling_metadata.all_greedy:
                 raise ValueError("Spyre DFlash/XPress currently supports greedy target decoding")
+            request = self.requests[self.input_batch.req_ids[0]]
+            params = request.sampling_params
+            assert params is not None
+            # CPU bookkeeping has already appended this step's sampled tokens.
+            at_output_limit = (
+                params.max_tokens is not None and len(request.output_token_ids) >= params.max_tokens
+            )
             return cast("SpyreDFlashProposer", self.drafter).propose_spyre(
                 sampled_token_ids,
                 aux_hidden_states,
                 self._get_positions(scheduler_output.total_num_scheduled_tokens),
                 spec_decode_metadata,
                 common_attn_metadata,
+                skip_proposal=at_output_limit,
             )
         return super().propose_draft_token_ids(
             scheduler_output,
