@@ -6,6 +6,13 @@ test, CPU regressions, device attention checks and checkpoint head probe pass.
 Broader model validation and production benchmarking remain separate gates. The optimization priorities
 below distinguish measurements from calculated work and profiling hypotheses.
 
+This report records the combined baseline at `ee20818`. The follow-on
+`feat/xpress-performance` branch adds request measurements, KV-only context
+projection, output-limit proposal skipping and device refinement feedback for
+b16/C512. See [the performance report](xpress-performance.md) for the controlled
+attention comparison, implementation details and updated bottlenecks. The CPU
+feedback and full-QKV costs described below refer to the baseline.
+
 ## Revisions and behavior
 
 | Component | Pinned revision | Role |

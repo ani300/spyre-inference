@@ -109,21 +109,27 @@ The backbone and refiner math are compiled on Spyre. The hidden-side projection
 of the refiner's `in_proj` is computed once per proposal. With top-C enabled,
 the initial full-vocabulary logits go to CPU once for argmax and top-k. The
 candidate IDs and scores are uploaded once, and their readout weight rows are
-gathered on Spyre once. Each pass computes only candidate scores, transfers
-those scores to CPU for argmax, and uploads the selected token IDs for the next
-pass. With top-C=0, each pass still transfers full-vocabulary scores, restricted
-to the 15 predicted rows.
+gathered on Spyre once. With block size 16, C512 and vocabulary size 512–262144,
+each pass selects candidate scores and assembles predecessor IDs on Spyre;
+only the final 15 int32 proposal IDs return to CPU. Exact vocabulary IDs and
+first-index ties are preserved. Other configurations transfer each pass's scores
+to CPU for argmax and upload the selected IDs. With top-C=0, those scores cover
+the full vocabulary, restricted to the 15 predicted rows.
 
 The model records D2H time, CPU argmax and top-k time, H2D time, candidate gather,
 refiner and readout time, and transferred bytes. `logits_transfer_bytes` counts
 the logical FP32 host payload, not measured PCIe traffic;
-`candidate_transfer_bytes` estimates uploaded INT32 IDs and FP16 scores. The proposer
+`candidate_transfer_bytes` estimates uploaded int32 IDs, FP16 scores and the
+native selector's two-digit ID table. `proposal_id_transfer_bytes` counts final
+native proposal IDs; device selection has separate count and time counters.
+The native path's initial 2,048-byte predecessor upload is outside the candidate
+counter. The proposer
 also records context projection and draft-forward time. These counters are
 available through the model runner for profiling; they are not a public metrics
 API. Host wall-clock intervals are diagnostic; asynchronous device work can be
 charged to the next transfer, so these counters are not exclusive kernel times.
 
-This boundary is intentional on the validated stack: device `argmax` falls back,
+Initial selection remains on CPU on the validated stack: device `argmax` falls back,
 FP16 `topk` corrupts large token IDs, and FP32 `topk` uses a different tie order.
 The transfer uses `logits.to(device="cpu", dtype=torch.float32)`. Materializing
 a FP16-to-FP32 cast on Spyre before transferring can permute values.
@@ -142,8 +148,11 @@ No production speedup is claimed. Measure ordinary decoding, K=0, and K=6
 with both top-C=0 and top-C=512
 after warmup on the same workload. Report accepted tokens per round alongside
 draft, refinement, verification, transfer, and host time. The shortlist reduces
-per-pass readout and D2H volume, but the initial vocabulary transfer, CPU top-k,
-and six synchronized selection round trips remain optimization candidates.
+per-pass readout and D2H volume. The initial vocabulary transfer, CPU top-k,
+target transfers and small refiner kernels remain optimization candidates.
+The performance branch also skips unused proposals at the output limit and uses
+KV-only draft context projection. See [the performance report](../architecture/xpress-performance.md)
+for measurements, validation scope and remaining work.
 
 ## Validation
 
