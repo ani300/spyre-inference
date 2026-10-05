@@ -35,7 +35,7 @@ from spyre_inference.v1.attention.ops.jagged_split_decode import (
 )
 from spyre_inference.v1.attention.ops.jagged_tile_attn import jagged_tile_attn_kernel
 
-pytestmark = pytest.mark.attention
+pytestmark = [pytest.mark.attention, pytest.mark.usefixtures("counted_spyre_loops")]
 
 PLAN_BUILDERS = {
     "flat": build_jagged_plan,

@@ -181,15 +181,25 @@ integration was brought up against torch-spyre
 vLLM `0.28.0+empty`, and Transformers `5.16.1`.
 
 The top-C update follows vLLM PR #54448 at
-`c768e7b6b1bf423bf276cf61b46a4b76f5ec7974`. New device validation on October 5
-used a fresh local build of torch-spyre PR #5086 at
-`59bd609efcf9cf80bbbba50daf9fdd48ddb36e38`. Input transfers and K=0 selection
-from precomputed logits passed, but even a standalone compiled 64-by-64 addition
-failed with `ComputeHardwareError 0x7b1b` and an instruction-fetch page fault.
-The failure reproduced on multiple free cards and with a control Python
-environment. Its root cause is unresolved. The new refinement kernels and
-top-C end-to-end generation therefore still require device validation; the
-historical full-vocabulary results do not cover this update.
+`c768e7b6b1bf423bf276cf61b46a4b76f5ec7974`. Device validation on October 5 uses a
+private build of torch-spyre PR #5086 at
+`fcc50670cec3abbbd5790874ae428ed7c868b00a`. Earlier `ComputeHardwareError 0x7b1b`
+failures came from the validation launcher's second venv activation dropping the
+workspace compiler directories from `PATH`: `/opt` compilers were paired with
+workspace runtime libraries. Preserving the canonical environment's `PATH` and
+using a fresh compile cache restored compiled addition and matmul. Check compiler
+executable paths as well as loaded library paths when reproducing results.
+A real-checkpoint head probe now passes exact candidate gathers and repeatable
+six-pass execution in both scoring modes. Teacher-forced shortlist scores differ
+from the pinned upstream FP32 head by 0.24–0.34% in relative L2, with one argmax
+difference in the first pass. Historical full-vocabulary generation results do
+not establish top-C end-to-end correctness or speedup.
+
+On the combined `feat/xpress-jagged-attention` branch, the Qwen3-8B hardware test
+also passed with C512, jagged attention and head-major KV on one card, including
+acceptance, cache rollback, stopping and cancellation. See the
+[integration report](../architecture/xpress-jagged-integration.md) for exact
+revisions, measured costs and the remaining validation matrix.
 
 Set `SPYRE_XPRESS_TEST_TOPC=0` or `512` when running the hardware test to check
 both scoring paths, using a fresh artifact directory for each invocation.
