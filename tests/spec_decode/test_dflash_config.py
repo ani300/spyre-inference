@@ -46,10 +46,38 @@ def test_xpress_bridge_preserves_checkpoint_and_disables_only_default_prefix_cac
     assert args.enable_prefix_caching is True
 
 
+def test_upstream_dflash_spelling_and_shortlist_override_are_preserved():
+    args = NS(
+        speculative_config=dict(method="dflash", model="checkpoint", xpress_topc=256),
+        additional_config={"unrelated": 1},
+        enable_prefix_caching=None,
+    )
+    normalize_speculative_config(args)
+    normalize_speculative_config(args)
+    assert args.speculative_config == dict(
+        method="dflash", model="checkpoint", disable_padded_drafter_batch=True
+    )
+    assert args.additional_config == {"unrelated": 1, "spyre_xpress": {"topc": 256}}
+    assert args.enable_prefix_caching is False
+
+
+@pytest.mark.parametrize("name", ["xpress_topc", "xpress_num_passes"])
+@pytest.mark.parametrize("value", [-1, True, 1.5, "512"])
+def test_invalid_cli_refiner_options_fail_before_vllm(name, value):
+    args = NS(
+        speculative_config={"method": "dflash", name: value},
+        additional_config=None,
+        enable_prefix_caching=None,
+    )
+    with pytest.raises(ValueError, match=name):
+        normalize_speculative_config(args)
+
+
 @pytest.fixture
 def config():
     target = NS(model_type="qwen3", hidden_size=4096, vocab_size=151936, num_hidden_layers=36)
     draft = NS(
+        architectures=["DFlashQwen3XPressModel"],
         hidden_size=4096,
         vocab_size=151936,
         layer_types=["full_attention"] * 5,
@@ -82,6 +110,39 @@ def config():
 def test_published_contract_is_accepted(config):
     validate_dflash_config(config)
     assert config.speculative_config.disable_padded_drafter_batch
+    assert config.speculative_config.draft_model_config.hf_config.xpress_topc == 512
+
+
+@pytest.mark.parametrize("architecture", ["Qwen3XPressModel", "DFlashQwen3XPressModel"])
+@pytest.mark.parametrize(
+    "checkpoint,override,expected", [(128, None, 128), (128, 0, 0), (0, 256, 256)]
+)
+def test_checkpoint_detection_and_topc_precedence(
+    config, architecture, checkpoint, override, expected
+):
+    draft = config.speculative_config.draft_model_config.hf_config
+    draft.architectures = [architecture]
+    draft.xpress_topc = checkpoint
+    config.additional_config = {} if override is None else {"spyre_xpress": {"topc": override}}
+    validate_dflash_config(config)
+    assert draft.xpress_topc == expected
+
+
+@pytest.mark.parametrize("value", [-1, True, 1.5, 151937])
+def test_invalid_checkpoint_topc_is_rejected(config, value):
+    config.speculative_config.draft_model_config.hf_config.xpress_topc = value
+    with pytest.raises(ValueError, match="xpress_topc"):
+        validate_dflash_config(config)
+
+
+def test_plain_dflash_does_not_accept_xpress_options(config):
+    draft = config.speculative_config.draft_model_config.hf_config
+    draft.architectures = ["DFlashDraftModel"]
+    del draft.xpress_rank
+    with pytest.raises(ValueError, match="XPress options"):
+        validate_dflash_config(config)
+    config.additional_config = {}
+    validate_dflash_config(config)
 
 
 @pytest.mark.parametrize(

@@ -11,7 +11,7 @@ from spyre_inference.v1.spec_decode.xpress_head import XPressRefinerHead
 @pytest.fixture
 def head_and_weights():
     torch.manual_seed(7)
-    head = XPressRefinerHead(73, 128, 16, rank=64, mlp_hidden=128).double()
+    head = XPressRefinerHead(73, 128, 16, rank=64, mlp_hidden=128, topc=0).double()
     state = head.state_dict()
     weights = {
         "xpress_head." + source: torch.randn_like(state[dest]) * 0.05
@@ -80,6 +80,45 @@ def test_jacobi_matches_unfolded_reference(head_and_weights, passes):
     actual = head(base, hidden, anchor, predecessor, passes)
     assert torch.equal(actual, block[:, 1:])
     assert torch.equal(actual, head(base, hidden, anchor, predecessor, passes))
+
+
+@pytest.mark.parametrize("topc", [0, 1, 7, 73])
+@pytest.mark.parametrize("passes", [0, 1, 6])
+def test_shortlist_matches_full_bias_restricted_to_fixed_candidates(head_and_weights, topc, passes):
+    head, weights = head_and_weights
+    head.topc = topc
+    hidden = torch.randn(2, 16, 128, dtype=torch.float64)
+    base = torch.randn(2, 16, 73, dtype=torch.float64) * 0.02
+    anchor, predecessor = torch.tensor([3, 17]), torch.tensor([5, 9])
+    expected = base[:, 1:].argmax(-1)
+    candidates = base[:, 1:].topk(topc, dim=-1).indices if topc else None
+    for _ in range(passes):
+        previous = torch.cat((predecessor[:, None], anchor[:, None], expected[:, :-1]), dim=1)
+        scores = (base + _unfolded_bias(weights, hidden, previous))[:, 1:]
+        if candidates is None:
+            expected = scores.argmax(-1)
+        else:
+            indices = scores.gather(-1, candidates).argmax(-1, keepdim=True)
+            expected = candidates.gather(-1, indices).squeeze(-1)
+    actual = head(base, hidden, anchor, predecessor, passes)
+    assert torch.equal(actual, expected)
+    if candidates is not None:
+        assert (actual.unsqueeze(-1) == candidates).any(-1).all()
+
+
+def test_hoisted_projection_and_candidate_readout_match_unfolded_bias(head_and_weights):
+    head, weights = head_and_weights
+    hidden = torch.randn(2, 16, 128, dtype=torch.float64)
+    previous = torch.randint(73, (2, 16))
+    candidates = torch.randint(73, (2, 15, 7))
+    expected = _unfolded_bias(weights, hidden, previous)[:, 1:].gather(-1, candidates)
+    actual = head.refine_candidates(
+        torch.zeros(2, 15, 7, dtype=torch.float64),
+        previous,
+        head.project_hidden_cache(hidden),
+        head.gather_readout(candidates),
+    )
+    torch.testing.assert_close(actual, expected, atol=1e-12, rtol=1e-12)
 
 
 def test_training_and_serving_checkpoint_roundtrip(head_and_weights):

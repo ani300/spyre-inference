@@ -8,18 +8,25 @@ import torch
 
 def normalize_speculative_config(engine_args) -> None:
     spec = engine_args.speculative_config
-    if not isinstance(spec, dict) or spec.get("method") != "xpress":
+    if not isinstance(spec, dict) or spec.get("method") not in ("dflash", "xpress"):
         return
     spec = dict(spec)
-    passes = spec.pop("xpress_num_passes", None)
-    if passes is not None and (type(passes) is not int or passes < 0):
-        raise ValueError("xpress_num_passes must be a nonnegative integer")
+    options = {}
+    for name, key in (("xpress_num_passes", "num_passes"), ("xpress_topc", "topc")):
+        value = spec.pop(name, None)
+        if value is not None:
+            if type(value) is not int or value < 0:
+                raise ValueError(f"{name} must be a nonnegative integer")
+            options[key] = value
+    # vLLM 0.28 predates these fields. Keep the public PR's spelling while
+    # passing the overrides through additional_config to our model adapter.
+    if spec["method"] == "xpress" or options:
+        extra = dict(engine_args.additional_config or {})
+        extra["spyre_xpress"] = dict(extra.get("spyre_xpress", {})) | options
+        engine_args.additional_config = extra
     spec["method"] = "dflash"
     spec["disable_padded_drafter_batch"] = True
     engine_args.speculative_config = spec
-    engine_args.additional_config = dict(engine_args.additional_config or {}) | {
-        "spyre_xpress": {"num_passes": passes}
-    }
     if engine_args.enable_prefix_caching is None:
         engine_args.enable_prefix_caching = False
 
@@ -86,11 +93,27 @@ def validate_dflash_config(config) -> None:
     block_size = getattr(draft, "xpress_block_size", getattr(draft, "block_size", None))
     if block_size != spec.num_speculative_tokens + 1:
         raise ValueError("num_speculative_tokens must equal the checkpoint block size minus one")
-    xpress = "spyre_xpress" in config.additional_config
-    if xpress and not hasattr(draft, "xpress_rank"):
+    options = config.additional_config.get("spyre_xpress", {})
+    xpress = any(
+        arch in ("Qwen3XPressModel", "DFlashQwen3XPressModel") for arch in draft.architectures
+    )
+    if "spyre_xpress" in config.additional_config and not xpress:
         raise ValueError(
-            "method='xpress' requires an XPress checkpoint, including its refiner weights"
+            "XPress options require an XPress checkpoint, including its refiner weights"
         )
+    if xpress:
+        if not hasattr(draft, "xpress_rank"):
+            raise ValueError("The XPress checkpoint is missing its refiner configuration")
+        for name, key, default in (
+            ("xpress_num_passes", "num_passes", 6),
+            ("xpress_topc", "topc", 512),
+        ):
+            value = options.get(key, getattr(draft, name, default))
+            if type(value) is not int or value < 0:
+                raise ValueError(f"{name} must be a nonnegative integer")
+            if name == "xpress_topc" and value > draft.vocab_size:
+                raise ValueError("xpress_topc must not exceed the draft vocabulary size")
+            setattr(draft, name, value)
     if getattr(draft, "sample_from_anchor", False):
         raise ValueError("Spyre XPress requires a fixed anchor in slot zero")
     spec.disable_padded_drafter_batch = True
