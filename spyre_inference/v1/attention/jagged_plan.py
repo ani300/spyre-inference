@@ -22,6 +22,7 @@ import numpy as np
 import torch
 
 from spyre_inference.v1.attention.ops.layout import INT32_ELEMS_PER_STICK
+from spyre_inference.v1.attention.spyre_attn_bucketer import resolve_buckets
 
 QUERY_TILE_SIZE = 64
 FP16_ELEMS_PER_STICK = 64
@@ -93,10 +94,48 @@ class JaggedPlanVariant:
     page_capacity: int
 
 
+def _page_capacity_for(required_pages, page_buckets):
+    """Smallest capacity in the ladder that covers ``required_pages``.
+
+    ``page_buckets`` is the already-resolved ladder, so a step can only pick a
+    capacity the recorder enumerated. Falls back to the geometric rounding when
+    no ladder is in play or the ladder tops out below the requirement.
+    """
+    if page_buckets:
+        covering = [p for p in page_buckets if p >= required_pages]
+        if covering:
+            return min(covering)
+    return 1 << (required_pages - 1).bit_length()
+
+
+def page_bucket_ladder(max_pages, page_buckets=None):
+    """Page capacities to specialize on, geometric unless an explicit ladder is given.
+
+    Geometric because the recorded set is the product of the query and page axes,
+    so a dense ladder makes warmup unaffordable at a long context. A caller-supplied
+    ladder trades that warmup cost for less page padding per step.
+    """
+    default = [1 << power for power in range((max_pages - 1).bit_length() + 1)]
+    if not page_buckets:
+        return default
+    return resolve_buckets(page_buckets, max_pages, "SPYRE_JAGGED_PAGE_CAPACITY_BUCKETS", lambda: default)
+
+
 def jagged_plan_variants(
-    max_tokens, max_seqs, max_seq_len, block_size, query_capacity, sliding_window=None
+    max_tokens,
+    max_seqs,
+    max_seq_len,
+    block_size,
+    query_capacity,
+    sliding_window=None,
+    page_buckets=None,
 ):
-    """Enumerate the independent group shapes needed by automatic mixed dispatch."""
+    """Enumerate the independent group shapes needed by automatic mixed dispatch.
+
+    Per query width, a knapsack over the token budget bounds how many tiles a step can
+    reach, and every (tile capacity, page capacity) pair up to that bound is emitted so
+    the recorder covers any schedulable batch and no step compiles in the serving path.
+    """
     max_width = min(512, 1 << ((query_capacity - 1).bit_length() - 1))
     costs: dict[int, dict[int, int]] = {}
     for count in range(1, min(max_tokens, max_seq_len) + 1):
@@ -109,7 +148,7 @@ def jagged_plan_variants(
             max_pages,
             (sliding_window + min(max_tokens, max_seq_len) + block_size - 1) // block_size + 1,
         )
-    page_capacities = [1 << power for power in range((max_pages - 1).bit_length() + 1)]
+    page_capacities = page_bucket_ladder(max_pages, page_buckets)
     variants = []
     for width, request_costs in sorted(costs.items()):
         states = {0: 0}
@@ -205,7 +244,14 @@ def _build_group_plan(
     sliding_window,
     max_parallel_entries,
     workspace,
+    page_buckets=None,
+    entry_geometry="page_first",
 ):
+    """Build the index tables for one group: split each sequence's queries into
+    ``width``-row tiles and record the page visits, bounds and key offsets each tile
+    needs, padded out to ``tile_capacity`` x ``page_capacity`` so the kernel shape is
+    reused across steps.
+    """
     if width <= 0 or (width != 1 and width % INT32_ELEMS_PER_STICK):
         raise ValueError("query tiles must be one row or contain whole int32 index sticks")
     if query_capacity <= width:
@@ -232,7 +278,8 @@ def _build_group_plan(
     if tile_capacity is None:
         tile_capacity = 1 << (required_tiles - 1).bit_length()
     if page_capacity is None:
-        page_capacity = 1 << (required_pages - 1).bit_length()
+        # Must land on a recorded bucket, else the step compiles in the serving path.
+        page_capacity = _page_capacity_for(required_pages, page_buckets)
     if tile_capacity < required_tiles or page_capacity < required_pages:
         raise ValueError("tile and page capacities must cover all query tiles and page visits")
 
@@ -242,9 +289,20 @@ def _build_group_plan(
         tile_ids = np.arange(tile_capacity)[:, None]
         page_slots = np.arange(page_capacity)[None, :]
     else:
-        entries = min(max_parallel_entries, page_capacity & -page_capacity)
-        queries_per_group = min(entries, tile_capacity & -tile_capacity)
-        slots = entries // queries_per_group
+        if entry_geometry == "query_first":
+            # Fill lanes with queries before pages. A bucket whose page capacity is
+            # below its tile count gets one lane per query instead of one per page,
+            # trading serial trips for parallel lanes at identical cell count.
+            queries_per_group = min(max_parallel_entries, tile_capacity & -tile_capacity)
+            slots = min(
+                max(1, max_parallel_entries // queries_per_group),
+                page_capacity & -page_capacity,
+            )
+            entries = queries_per_group * slots
+        else:
+            entries = min(max_parallel_entries, page_capacity & -page_capacity)
+            queries_per_group = min(entries, tile_capacity & -tile_capacity)
+            slots = entries // queries_per_group
         groups = tile_capacity // queries_per_group
         chunks = page_capacity // slots
         table_shape = (groups, chunks, entries)
@@ -334,6 +392,28 @@ def _build_group_plan(
     return plan
 
 
+def _merge_to_cap(buckets, max_groups):
+    """Merge the cheapest adjacent context buckets until at most ``max_groups`` remain.
+
+    Cost of a bucket is its padded cell count, tiles x pages, so the pair chosen is
+    the one whose merge grows the total least. ``max_groups`` of 1 collapses back to
+    width-only keying.
+    """
+    keys = sorted(buckets)
+    while len(keys) > max_groups:
+        best, where = None, 0
+        for i in range(len(keys) - 1):
+            merged = len(buckets[keys[i]]) + len(buckets[keys[i + 1]])
+            cost = (1 << (max(merged - 1, 0)).bit_length()) * keys[i + 1]
+            if best is None or cost < best:
+                best, where = cost, i
+        lo, hi = keys[where], keys[where + 1]
+        buckets[hi] = buckets[lo] + buckets[hi]
+        del buckets[lo]
+        keys = sorted(buckets)
+    return buckets
+
+
 def build_jagged_mixed_plan(
     query_start_loc: torch.Tensor,
     seq_lens: torch.Tensor,
@@ -347,6 +427,10 @@ def build_jagged_mixed_plan(
     decode_threshold: int = 8,
     max_parallel_entries: int = INT32_ELEMS_PER_STICK,
     workspace: JaggedPlanWorkspace | None = None,
+    page_buckets: list[int] | None = None,
+    group_bucketing: bool = False,
+    max_groups: int = 0,
+    entry_geometry: str = "page_first",
 ) -> JaggedMixedPlan:
     """Build final query-width groups directly in the original packed row space."""
     if query_tile_size not in (0, 64, 128, 256, 512):
@@ -360,7 +444,8 @@ def build_jagged_mixed_plan(
     )
     query_lens = inputs[3]
     max_width = max(64, min(512, 1 << (max(query_capacity - 1, 1).bit_length() - 1)))
-    groups: dict[int, list[int]] = {}
+    lengths = inputs[1]
+    groups: dict[tuple[int, int], list[int]] = {}
     for seq, count in enumerate(query_lens.tolist()):
         if not count:
             continue
@@ -369,7 +454,20 @@ def build_jagged_mixed_plan(
             if count <= decode_threshold
             else query_tile_size or min(max_width, max(64, 1 << (count - 1).bit_length()))
         )
-        groups.setdefault(width, []).append(seq)
+        bucket = 0
+        if group_bucketing and width == 1:
+            pages = (int(lengths[seq]) + block_size - 1) // block_size
+            bucket = _page_capacity_for(max(1, pages), page_buckets)
+        groups.setdefault((width, bucket), []).append(seq)
+    if group_bucketing and max_groups >= 1:
+        by_width: dict[int, dict[int, list[int]]] = {}
+        for (width, bucket), seqs in groups.items():
+            by_width.setdefault(width, {})[bucket] = seqs
+        groups = {
+            (width, bucket): seqs
+            for width, buckets in by_width.items()
+            for bucket, seqs in _merge_to_cap(buckets, max_groups).items()
+        }
     plans = [
         _build_group_plan(
             inputs,
@@ -383,8 +481,10 @@ def build_jagged_mixed_plan(
             sliding_window,
             max_parallel_entries if width == 1 else None,
             workspace,
+            page_buckets,
+            entry_geometry,
         )
-        for width, seqs in sorted(groups.items())
+        for (width, _bucket), seqs in sorted(groups.items())
     ]
     return JaggedMixedPlan(tuple(plans), query_capacity)
 
@@ -494,7 +594,13 @@ def build_jagged_plan(
     causal: bool = True,
     sliding_window: int | None = None,
 ) -> JaggedAttentionPlan:
-    """Build flat page visits over packed token rows."""
+    """Build flat page visits over packed token rows.
+
+    Every (query tile, page) pair becomes one row of the tables, padded to
+    ``work_capacity`` so the step count is a bucket rather than a batch property;
+    inactive rows and non-final pages are routed to a sink row past
+    ``query_capacity`` so only the last visit of a tile writes its output.
+    """
     if block_size <= 0 or query_tile_size <= 0:
         raise ValueError("block_size and query_tile_size must be positive")
     if query_tile_size != 1 and query_tile_size % INT32_ELEMS_PER_STICK:

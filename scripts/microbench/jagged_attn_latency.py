@@ -32,7 +32,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-SCENARIOS = ("decode1", "decode4", "prefill512", "mixed512", "jagged69")
+SCENARIOS = ("decode1", "decode4", "prefill512", "mixed512", "jagged69", "spread4")
 
 
 def request_lengths(scenario, context):
@@ -51,6 +51,12 @@ def request_lengths(scenario, context):
         return [1, 511], [context, 3 * context // 4 + 17]
     if scenario == "jagged69":
         return [1, 65, 3], [context, 3 * context // 4 + 17, context // 2 + 33]
+    if scenario == "spread4":
+        # Decode batch spanning two decades of context. decode4 keeps every sequence
+        # within 5/8..1 of the longest, so it cannot show what context bucketing does;
+        # here the longest sets a padded width the three short ones do not need.
+        # Four sequences, not more: max_num_seqs is 4 in this harness's engine config.
+        return [1] * 4, [context, max(1, context // 8 + 7), 421, 179]
     raise ValueError(scenario)
 
 

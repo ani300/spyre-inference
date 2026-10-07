@@ -53,6 +53,7 @@ from spyre_inference.v1.attention.jagged_plan import (
     build_jagged_mixed_plan,
     build_jagged_tile_plan,
     jagged_plan_variants,
+    page_bucket_ladder,
 )
 from spyre_inference.v1.attention.ops import tile_loop
 from spyre_inference.v1.attention.ops.batched_decode import batched_decode_kernel
@@ -436,10 +437,21 @@ class SpyreAttentionMetadataBuilder(AttentionMetadataBuilder[SpyreAttentionMetad
             QUERY_TILE_SIZE + 1, vllm_config.scheduler_config.max_num_batched_tokens + 1
         )
         self._jagged_workspace = JaggedPlanWorkspace()
+        self._jagged_plan_logged = False
         self._jagged_device_workspace = _JaggedDeviceWorkspace()
         self._jagged_parallel_entries = envs.SPYRE_JAGGED_PARALLEL_ENTRIES
         self._jagged_max_num_seqs = vllm_config.scheduler_config.max_num_seqs
         self._jagged_max_num_tokens = vllm_config.scheduler_config.max_num_batched_tokens
+        # Resolved once here, not per step: both the recorder and the per-step
+        # capacity read it, so they cannot pick different page shapes.
+        self._jagged_page_buckets = (
+            page_bucket_ladder(
+                (self._max_model_len + self.block_size - 1) // self.block_size,
+                envs.SPYRE_JAGGED_PAGE_CAPACITY_BUCKETS,
+            )
+            if envs.SPYRE_JAGGED_PAGE_CAPACITY_BUCKETS
+            else None
+        )
         self.sliding_window = getattr(kv_cache_spec, "sliding_window", None)
         if self.sliding_window is not None and self.sliding_window <= 0:
             raise ValueError(f"sliding_window must be positive, got {self.sliding_window}")
@@ -849,7 +861,26 @@ class SpyreAttentionMetadataBuilder(AttentionMetadataBuilder[SpyreAttentionMetad
                 sliding_window=self.sliding_window,
                 max_parallel_entries=max_entries,
                 workspace=self._jagged_workspace,
+                page_buckets=self._jagged_page_buckets,
+                group_bucketing=envs.SPYRE_JAGGED_CONTEXT_GROUPS,
+                max_groups=envs.SPYRE_JAGGED_MAX_CONTEXT_GROUPS,
+                entry_geometry=envs.SPYRE_JAGGED_ENTRY_GEOMETRY,
             )
+            if not self._jagged_plan_logged:
+                # Logged once: without it a run cannot be shown to have used the
+                # configuration it was given, and a silent no-op looks like a result.
+                self._jagged_plan_logged = True
+                logger.info(
+                    "Jagged mixed plan: %d group(s), page capacities %s, "
+                    "context_groups=%s max_context_groups=%d entry_geometry=%s "
+                    "page_capacity_buckets=%s",
+                    len(plan.groups),
+                    [int(g.page_indices.shape[-2]) for g in plan.groups],
+                    envs.SPYRE_JAGGED_CONTEXT_GROUPS,
+                    envs.SPYRE_JAGGED_MAX_CONTEXT_GROUPS,
+                    envs.SPYRE_JAGGED_ENTRY_GEOMETRY,
+                    self._jagged_page_buckets,
+                )
             self._slot_mapping.publish(slot_mapping)
             return SpyreAttentionMetadata(
                 num_actual_tokens=common_attn_metadata.num_actual_tokens,
@@ -1650,6 +1681,7 @@ class SpyreAttentionImpl(AttentionImpl[SpyreAttentionMetadata]):
             builder.block_size,
             builder._jagged_query_capacity,
             builder.sliding_window,
+            builder._jagged_page_buckets,
         )
         q_staging, out_staging = self._staging_buffers(kv_cache[0].device)
         entries = min(
