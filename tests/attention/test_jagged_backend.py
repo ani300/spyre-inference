@@ -169,7 +169,13 @@ def test_jagged_builder_and_packed_dispatch(
     assert all(kernel.call_count == 4 for kernel in kernels)
 
 
-def test_jagged_warmup_covers_scheduled_group_shapes(monkeypatch, backend_config):
+@pytest.mark.parametrize("batch_parallel", [False, True])
+@pytest.mark.parametrize("min_query_tile_size", [16, 64])
+def test_jagged_warmup_covers_scheduled_group_shapes(
+    monkeypatch, backend_config, batch_parallel, min_query_tile_size
+):
+    monkeypatch.setattr(envs, "SPYRE_JAGGED_BATCH_PARALLEL", batch_parallel)
+    monkeypatch.setattr(envs, "SPYRE_JAGGED_MIN_QUERY_TILE", min_query_tile_size)
     config = backend_config
     builder = spyre_attn.SpyreAttentionMetadataBuilder(
         AttentionSpec(block_size=64, num_kv_heads=2, head_size=64, dtype=torch.float16),
@@ -189,7 +195,13 @@ def test_jagged_warmup_covers_scheduled_group_shapes(monkeypatch, backend_config
     cache = spyre_attn.SpyrePagedKVCache(torch.zeros(65, 64, 2, 64), torch.zeros(65, 64, 2, 64))
     with torch.inference_mode():
         count = impl.record_graphs(None, cache, builder)
-        assert count == len(recorded) == len(jagged_plan_variants(192, 8, 384, 64, 193))
+        assert (
+            count
+            == len(recorded)
+            == len(
+                jagged_plan_variants(192, 8, 384, 64, 193, min_query_tile_size=min_query_tile_size)
+            )
+        )
         generator = torch.Generator().manual_seed(72)
         for _ in range(80):
             requests = int(torch.randint(1, 9, (), generator=generator))

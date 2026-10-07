@@ -35,6 +35,8 @@ if TYPE_CHECKING:
     SPYRE_ATTN_FOR_EACH_TILE: bool = True
     SPYRE_JAGGED_ATTENTION: bool = False
     SPYRE_JAGGED_PARALLEL_ENTRIES: int = 64
+    SPYRE_JAGGED_BATCH_PARALLEL: bool = False
+    SPYRE_JAGGED_MIN_QUERY_TILE: int = 64
     SPYRE_ATTN_KV_BUCKETS: str | None = None
     SPYRE_ATTN_QUERY_BUCKETS: str | None = None
     SPYRE_ATTN_NUM_SEQS_BUCKETS: str | None = None
@@ -86,6 +88,10 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # use static for_each_tile loops and a shared output. Always compiled. No ALiBi.
     "SPYRE_JAGGED_ATTENTION": lambda: bool(int(os.getenv("SPYRE_JAGGED_ATTENTION", "0"))),
     "SPYRE_JAGGED_PARALLEL_ENTRIES": lambda: int(os.getenv("SPYRE_JAGGED_PARALLEL_ENTRIES", "64")),
+    # Experimental decode budget over query/page pairs instead of pages alone.
+    "SPYRE_JAGGED_BATCH_PARALLEL": lambda: bool(int(os.getenv("SPYRE_JAGGED_BATCH_PARALLEL", "0"))),
+    # Minimum non-decode query tile, 16/32/64. The default retains the original schedule.
+    "SPYRE_JAGGED_MIN_QUERY_TILE": lambda: int(os.getenv("SPYRE_JAGGED_MIN_QUERY_TILE", "64")),
     # Comma-separated kv_len buckets to record, unset uses the default buckets of
     # powers of two from block_size up to max_model_len.
     "SPYRE_ATTN_KV_BUCKETS": lambda: os.getenv("SPYRE_ATTN_KV_BUCKETS"),

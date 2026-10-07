@@ -10,7 +10,6 @@ import argparse
 import hashlib
 import json
 import os
-import shutil
 import statistics
 import subprocess
 import time
@@ -29,32 +28,39 @@ from xpress_latency import (
 
 def _fingerprint(worker):
     import torch_spyre
-    from jagged_attn_latency import source_manifest
+    from jagged_attn_latency import binary_manifest, source_manifest
 
     import spyre_inference
 
-    paths = {str(Path(torch_spyre._C.__file__).resolve())}
-    for line in Path("/proc/self/maps").read_text().splitlines():
-        fields = line.split()
-        if (
-            len(fields) >= 6
-            and ("/sentient/" in fields[-1] or "/senlib/" in fields[-1])
-            and Path(fields[-1]).is_file()
-        ):
-            paths.add(str(Path(fields[-1]).resolve()))
-    for name in ("dbo-opt", "dxp_standalone", "dpc_standalone", "deeprt_standalone"):
-        path = shutil.which(name)
-        assert path is not None
-        paths.add(str(Path(path).resolve()))
     return dict(
         sources={
             "inference": source_manifest(spyre_inference),
             "torch_spyre": source_manifest(torch_spyre),
         },
-        binaries={
-            path: hashlib.sha256(Path(path).read_bytes()).hexdigest() for path in sorted(paths)
-        },
+        binaries=binary_manifest(torch_spyre),
     )
+
+
+def _start_device_profile(worker):
+    import torch
+
+    worker._batch_latency_profile = torch.profiler.profile(
+        activities=[
+            torch.profiler.ProfilerActivity.CPU,
+            torch.profiler.ProfilerActivity.PrivateUse1,
+        ],
+    )
+    worker._batch_latency_profile.start()
+
+
+def _stop_device_profile(worker, path):
+    import torch
+
+    torch.spyre.synchronize()
+    profile = worker._batch_latency_profile
+    profile.stop()
+    profile.export_chrome_trace(path)
+    del worker._batch_latency_profile
 
 
 def main():
@@ -68,6 +74,9 @@ def main():
     parser.add_argument("--token-budget", type=int, choices=(128, 256), default=256)
     parser.add_argument("--warmup", type=int, default=1)
     parser.add_argument("--repeats", type=int, default=3)
+    parser.add_argument("--jagged-batch-parallel", type=int, choices=(0, 1), default=0)
+    parser.add_argument("--jagged-min-query-tile", type=int, choices=(16, 32, 64), default=64)
+    parser.add_argument("--profile-output", type=Path)
     args = parser.parse_args()
     if min(args.prompt_lengths) < 1 or args.max_tokens < 2 or min(args.warmup, args.repeats) < 1:
         parser.error("positive lengths/repeats and at least two output tokens are required")
@@ -77,6 +86,8 @@ def main():
     if args.token_budget == 256:
         buckets.append(256)
     os.environ["SPYRE_JAGGED_ATTENTION"] = str(args.jagged)
+    os.environ["SPYRE_JAGGED_BATCH_PARALLEL"] = str(args.jagged_batch_parallel)
+    os.environ["SPYRE_JAGGED_MIN_QUERY_TILE"] = str(args.jagged_min_query_tile)
     os.environ["SPYRE_ATTN_KV_LAYOUT"] = "head_major"
     os.environ["SPYRE_MAX_NUM_PARTIAL_PREFILLS"] = "4"
     os.environ["SPYRE_ATTN_QUERY_BUCKETS"] = ",".join(map(str, (1, 16, 64, args.token_budget)))
@@ -102,7 +113,11 @@ def main():
     args.output.parent.mkdir(parents=True, exist_ok=True)
     report = dict(
         created_at=datetime.now(UTC).isoformat(),
-        parameters=vars(args) | {"output": str(args.output)},
+        parameters=vars(args)
+        | {
+            "output": str(args.output),
+            "profile_output": str(args.profile_output) if args.profile_output else None,
+        },
         model=TARGET,
         revision=TARGET_REVISION,
         draft=DRAFT if args.mode == "xpress" else None,
@@ -122,6 +137,9 @@ def main():
                 "SPYRE_ATTN_RECORD",
                 "SPYRE_ATTN_PROFILING",
                 "SPYRE_ATTN_QUERY_BUCKETS",
+                "SPYRE_JAGGED_PARALLEL_ENTRIES",
+                "SPYRE_JAGGED_BATCH_PARALLEL",
+                "SPYRE_JAGGED_MIN_QUERY_TILE",
                 "TORCHINDUCTOR_COMPILE_THREADS",
                 "DXP_LOOP_UNROLL",
             )
@@ -300,6 +318,15 @@ def main():
             for key in ("seconds", "output_tokens_per_second")
         }
         report["token_digest"] = hashlib.sha256(json.dumps(expected).encode()).hexdigest()
+        if args.profile_output:
+            args.profile_output.parent.mkdir(parents=True, exist_ok=True)
+            llm.collective_rpc(_start_device_profile)
+            try:
+                report["profile_run"] = run("profile")
+            finally:
+                llm.collective_rpc(_stop_device_profile, args=(str(args.profile_output.resolve()),))
+            assert report["profile_run"]["unique_graphs"] == 0
+            assert [r["token_ids"] for r in report["profile_run"]["requests"]] == expected
         report["complete"] = True
         save()
         print("COMPLETE", args.output, report["summary"], flush=True)

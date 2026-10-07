@@ -13,13 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Compare warmed head-major and jagged attention without a device profiler."""
+"""Compare warmed head-major and jagged attention, with optional separate device traces."""
 
 import argparse
 import gc
 import hashlib
 import json
 import os
+import shutil
 import statistics
 import subprocess
 import sys
@@ -32,14 +33,14 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-SCENARIOS = ("decode1", "decode4", "prefill512", "mixed512", "jagged69")
+SCENARIOS = ("decode1", "decode4", "verify4", "draft4", "prefill512", "mixed512", "jagged69")
 
 
 def request_lengths(scenario, context):
     if scenario == "decode1":
         return [1], [context]
-    if scenario == "decode4":
-        return [1] * 4, [
+    if scenario in ("decode4", "verify4", "draft4"):
+        return [1 if scenario == "decode4" else 16] * 4, [
             context,
             7 * context // 8 - 13,
             3 * context // 4 + 7,
@@ -54,7 +55,7 @@ def request_lengths(scenario, context):
     raise ValueError(scenario)
 
 
-def reference_attention(query, keys, values, block_table, query_lens, seq_lens):
+def reference_attention(query, keys, values, block_table, query_lens, seq_lens, *, causal=True):
     """Float32 dense causal attention, independent of either backend's schedule."""
     import torch
 
@@ -74,7 +75,8 @@ def reference_attention(query, keys, values, block_table, query_lens, seq_lens):
                 q = query[offset + start : offset + end, heads].float().transpose(0, 1)
                 scores = (q @ k.T) * head_size**-0.5
                 q_positions = seq_len - query_len + torch.arange(start, end)
-                scores.masked_fill_(positions[None, :] > q_positions[:, None], float("-inf"))
+                if causal:
+                    scores.masked_fill_(positions[None, :] > q_positions[:, None], float("-inf"))
                 output[offset + start : offset + end, heads] = (scores.softmax(-1) @ v).transpose(
                     0, 1
                 )
@@ -152,6 +154,24 @@ def source_manifest(module):
     }
 
 
+def binary_manifest(module):
+    paths = {str(Path(module._C.__file__).resolve())}
+    for line in Path("/proc/self/maps").read_text().splitlines():
+        fields = line.split()
+        if (
+            len(fields) >= 6
+            and ("/sentient/" in fields[-1] or "/senlib/" in fields[-1])
+            and Path(fields[-1]).is_file()
+        ):
+            paths.add(str(Path(fields[-1]).resolve()))
+    for name in ("dbo-opt", "dxp_standalone", "dpc_standalone", "deeprt_standalone"):
+        path = shutil.which(name)
+        if path is None:
+            raise RuntimeError(f"missing compiler executable: {name}")
+        paths.add(str(Path(path).resolve()))
+    return {path: hashlib.sha256(Path(path).read_bytes()).hexdigest() for path in sorted(paths)}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -183,6 +203,9 @@ def main():
         help="Maximum serial pages per partial state in two-kernel decode",
     )
     parser.add_argument("--jagged-parallel-entries", type=int, choices=(32, 64, 128), default=64)
+    parser.add_argument("--jagged-batch-parallel", type=int, choices=(0, 1), default=0)
+    parser.add_argument("--jagged-min-query-tile", type=int, choices=(16, 32, 64), default=64)
+    parser.add_argument("--profile-dir", type=Path)
     parser.add_argument(
         "--output-buffer",
         choices=("staging", "model"),
@@ -198,6 +221,10 @@ def main():
     )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    if args.jagged_schedule != "serving" and (
+        args.jagged_batch_parallel or args.jagged_min_query_tile != 64
+    ):
+        parser.error("the scheduling experiments require --jagged-schedule serving")
     if args.output_buffer == "model" and any(
         s not in ("decode1", "decode4") for s in args.scenarios
     ):
@@ -211,8 +238,13 @@ def main():
         parser.error("page_parallel/split require decode scenarios and query tile width 0 or 1")
     if not (args.warmup >= 2 and args.samples >= 3):
         parser.error("at least two warmups and three samples are required")
-    if min(args.contexts) < 1024 or max(args.contexts) > args.max_model_len:
-        parser.error("contexts must be between 1024 and max-model-len")
+    if min(args.contexts) < 64 or max(args.contexts) > args.max_model_len:
+        parser.error("contexts must be between 64 and max-model-len")
+    for context in args.contexts:
+        for scenario in args.scenarios:
+            queries, lengths = request_lengths(scenario, context)
+            if any(q > length for q, length in zip(queries, lengths, strict=True)):
+                parser.error(f"{scenario} needs more context than {context}")
     if args.num_heads % args.num_kv_heads or args.head_size % 64 or args.block_size % 64:
         parser.error("heads must divide by KV heads; head and block sizes must be stick aligned")
     if args.output.exists():
@@ -221,6 +253,8 @@ def main():
 
     os.environ["SPYRE_NUM_CPUS"] = "8"
     os.environ["SPYRE_ATTN_PROFILING"] = "0"
+    os.environ["SPYRE_JAGGED_BATCH_PARALLEL"] = str(args.jagged_batch_parallel)
+    os.environ["SPYRE_JAGGED_MIN_QUERY_TILE"] = str(args.jagged_min_query_tile)
     os.environ.setdefault("VLLM_PLUGINS", "spyre_inference")
     os.environ.setdefault("DXP_LOOP_UNROLL", "0")
     for name in (
@@ -241,6 +275,8 @@ def main():
 
     import torch
     import torch_spyre
+
+    torch_spyre._autoload()
     from torch._dynamo.utils import counters
     from torch_spyre.ops.fallbacks import FallbackWarning
     from vllm.config import CompilationMode
@@ -269,14 +305,11 @@ def main():
     from spyre_inference.v1.attention.ops.jagged_tile_attn import jagged_tile_attn_kernel
     from spyre_inference.v1.attention.ops.layout import head_major_kv_layout
 
-    torch_spyre._autoload()
     register_all()
     configure_threading(1)
     torch.set_num_threads(8)
     torch.set_num_interop_threads(1)
     dependencies = subprocess.check_output(["ldd", torch_spyre._C.__file__], text=True)
-    if "libaiupti" in dependencies:
-        raise RuntimeError("latency requires torch-spyre built with USE_SPYRE_PROFILER=0")
     if not envs.SPYRE_ATTN_FOR_EACH_TILE or not envs.SPYRE_BATCHED_DECODE:
         raise RuntimeError("the comparison requires for_each_tile and the default batched decode")
     if any(
@@ -310,7 +343,11 @@ def main():
         "started_utc": datetime.now(UTC).isoformat(),
         "command": sys.argv,
         "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-        "parameters": {**vars(args), "output": str(args.output)},
+        "parameters": {
+            **vars(args),
+            "output": str(args.output),
+            "profile_dir": str(args.profile_dir) if args.profile_dir else None,
+        },
         "metric": "synchronized warmed backend forward wall latency, milliseconds",
         "excluded": [
             "KV insertion",
@@ -327,6 +364,7 @@ def main():
             "path": torch_spyre._C.__file__,
             "sha256": hashlib.sha256(Path(torch_spyre._C.__file__).read_bytes()).hexdigest(),
             "ldd": dependencies,
+            "profiler_linked": "libaiupti" in dependencies,
         },
         "torch_version": torch.__version__,
         "python": sys.executable,
@@ -352,6 +390,8 @@ def main():
     device = torch.device("spyre")
     torch.spyre.set_device(0)
     torch.spyre.synchronize()
+    report["binaries_before"] = binary_manifest(torch_spyre)
+    save_report(args.output, report)
     spec = AttentionSpec(
         block_size=args.block_size,
         num_kv_heads=args.num_kv_heads,
@@ -393,6 +433,8 @@ def main():
                 return plan_builder(
                     *inputs, **kwargs, max_parallel_entries=args.jagged_parallel_entries
                 )
+            kwargs.pop("batch_parallel", None)
+            kwargs.pop("min_query_tile_size", None)
             if args.jagged_schedule == "flat":
                 kwargs.pop("workspace", None)
             width = args.jagged_query_tile_size
@@ -585,13 +627,15 @@ def main():
                     max_seq_len=max(seq_lens),
                     block_table_tensor=table[: len(q_lens)],
                     slot_mapping=slots,
-                    causal=True,
+                    causal=scenario != "draft4",
                 )
                 print(
                     f"CASE {scenario} context={context} queries={q_lens} lengths={seq_lens}",
                     flush=True,
                 )
-                expected = reference_attention(query, keys, values, table, q_lens, seq_lens)
+                expected = reference_attention(
+                    query, keys, values, table, q_lens, seq_lens, causal=scenario != "draft4"
+                )
                 active = {}
                 for name, (builder, impl, q_staging, out_staging) in legs.items():
                     if args.output_buffer == "model":
@@ -627,6 +671,8 @@ def main():
                                     {
                                         "kind": args.mixed_decode_schedule,
                                         "query_tile_size": 1,
+                                        "parallel_entries": entries,
+                                        "queries_per_group": group.output_indices.shape[1],
                                         "work_capacity": groups * chunks * entries,
                                         "page_loop_iterations": groups * chunks,
                                     }
@@ -778,9 +824,38 @@ def main():
                 save_report(args.output, report)
                 if graph_delta:
                     raise RuntimeError("unexpected compilation during the measured window")
+                if args.profile_dir:
+                    args.profile_dir.mkdir(parents=True, exist_ok=True)
+                    for name, (impl, q_staging, out_staging, metadata, row) in active.items():
+                        trace = args.profile_dir / f"{scenario}-{context}-{name}.trace.json"
+                        with torch.profiler.profile(
+                            activities=[
+                                torch.profiler.ProfilerActivity.CPU,
+                                torch.profiler.ProfilerActivity.PrivateUse1,
+                            ],
+                        ) as profile:
+                            for iteration in range(3):
+                                with torch.profiler.record_function(
+                                    f"attention::{name}::{scenario}::{context}::{iteration}"
+                                ):
+                                    impl.forward(
+                                        None, q_staging, None, None, cache, metadata, out_staging
+                                    )
+                                    torch.spyre.synchronize()
+                        profile.export_chrome_trace(str(trace))
+                        row["profile_trace"] = str(trace)
+                    save_report(args.output, report)
         torch.spyre.synchronize()
     report["finished_utc"] = datetime.now(UTC).isoformat()
+    report["binaries_after"] = binary_manifest(torch_spyre)
+    report["complete"] = (
+        len(report["rows"]) == 2 * len(args.contexts) * len(args.scenarios)
+        and all(row.get("valid_timing", False) for row in report["rows"])
+        and report["binaries_before"] == report["binaries_after"]
+    )
     save_report(args.output, report)
+    if not report["complete"]:
+        raise RuntimeError("comparison failed correctness, compilation or stack stability checks")
 
 
 if __name__ == "__main__":

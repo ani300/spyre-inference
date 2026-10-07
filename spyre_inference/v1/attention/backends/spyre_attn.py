@@ -850,6 +850,8 @@ class SpyreAttentionMetadataBuilder(AttentionMetadataBuilder[SpyreAttentionMetad
                 sliding_window=self.sliding_window,
                 max_parallel_entries=max_entries,
                 workspace=self._jagged_workspace,
+                batch_parallel=envs.SPYRE_JAGGED_BATCH_PARALLEL,
+                min_query_tile_size=envs.SPYRE_JAGGED_MIN_QUERY_TILE,
             )
             self._slot_mapping.publish(slot_mapping)
             return SpyreAttentionMetadata(
@@ -1664,6 +1666,7 @@ class SpyreAttentionImpl(AttentionImpl[SpyreAttentionMetadata]):
             builder.block_size,
             builder._jagged_query_capacity,
             builder.sliding_window,
+            min_query_tile_size=envs.SPYRE_JAGGED_MIN_QUERY_TILE,
         )
         q_staging, out_staging = self._staging_buffers(kv_cache[0].device)
         entries = min(
@@ -1694,7 +1697,14 @@ class SpyreAttentionImpl(AttentionImpl[SpyreAttentionMetadata]):
                     causal=causal,
                     sliding_window=builder.sliding_window,
                     workspace=builder._jagged_workspace,
-                    **({"max_parallel_entries": entries} if decode else {}),
+                    **(
+                        {
+                            "max_parallel_entries": entries,
+                            "batch_parallel": envs.SPYRE_JAGGED_BATCH_PARALLEL,
+                        }
+                        if decode
+                        else {}
+                    ),
                 )
                 q_ids, out_ids, page_ids, q_bounds, k_offsets = (
                     builder._jagged_device_workspace.mirror(plan.tensors, kv_cache[0].device)

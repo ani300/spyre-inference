@@ -27,17 +27,24 @@ from spyre_inference.v1.attention.jagged_plan import (
 )
 
 
-@pytest.mark.parametrize("width", [1, 64, 128])
+@pytest.mark.parametrize("width,batch_parallel", [(1, False), (1, True), (64, False), (128, False)])
 @pytest.mark.parametrize("window", [None, 129])
 @pytest.mark.parametrize("causal", [False, True])
-def test_direct_plan_matches_flat_page_visits(width, window, causal):
+def test_direct_plan_matches_flat_page_visits(width, batch_parallel, window, causal):
     starts = torch.tensor([0, 1, 4, 4, 69], dtype=torch.int32)
     lengths = torch.tensor([1025, 777, 0, 413], dtype=torch.int32)
     pages = torch.randperm(64, generator=torch.Generator().manual_seed(9)).reshape(4, 16)
     kwargs = dict(query_capacity=193, query_tile_size=width, causal=causal, sliding_window=window)
     flat = build_jagged_plan(starts, lengths, pages, 128, **kwargs)
     builder = build_jagged_decode_plan if width == 1 else build_jagged_tile_plan
-    plan = builder(starts, lengths, pages, 128, **kwargs)
+    plan = builder(
+        starts,
+        lengths,
+        pages,
+        128,
+        **kwargs,
+        **({"batch_parallel": batch_parallel} if width == 1 else {}),
+    )
     q_ids, out_ids, page_ids, bounds, offsets = plan.tensors
     if width == 1:
         groups, chunks, entries, stick = page_ids.shape
@@ -82,6 +89,33 @@ def test_direct_plan_matches_flat_page_visits(width, window, causal):
     assert torch.all(out_ids[len(first) :] >= 193)
     assert torch.all(bounds[len(first) :] == -1)
     assert torch.all(offsets[len(first) :] == -1)
+
+
+@pytest.mark.parametrize(
+    "requests,pages_per_request,budget,iterations",
+    [(1, 8, 32, 1), (4, 8, 32, 1), (4, 16, 32, 2), (3, 2, 32, 1), (65, 1, 32, 4)],
+)
+def test_decode_parallel_budget_covers_query_page_pairs(
+    requests, pages_per_request, budget, iterations
+):
+    starts = torch.arange(requests + 1, dtype=torch.int32)
+    lengths = torch.full((requests,), 128 * pages_per_request, dtype=torch.int32)
+    pages = torch.arange(requests * pages_per_request, dtype=torch.int32).view(requests, -1)
+    plan = build_jagged_decode_plan(
+        starts,
+        lengths,
+        pages,
+        128,
+        query_capacity=(1 << (requests - 1).bit_length()) + 1,
+        max_parallel_entries=budget,
+        batch_parallel=True,
+    )
+    groups, chunks, entries, _ = plan.page_indices.shape
+    assert groups * chunks == iterations
+    assert entries <= budget
+    assert plan.num_work_items == requests * pages_per_request
+    live = plan.output_indices[plan.output_indices < plan.query_capacity]
+    torch.testing.assert_close(live.sort().values, torch.arange(requests, dtype=torch.int32))
 
 
 def test_workspace_reuses_released_plans_and_preserves_live_plans():

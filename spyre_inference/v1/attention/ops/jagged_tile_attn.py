@@ -131,6 +131,12 @@ def jagged_tile_attn_kernel(
         out_dim=None if out is None else 0,
     )
     if out is not None:
-        out.index_copy_(0, output_indices.reshape(-1), tiles)
+        if query_tile_size < 32:
+            # Preserve each short int32 index row's separate stick.
+            for group in range(output_indices.shape[0]):
+                start = group * query_tile_size
+                out.index_copy_(0, output_indices[group], tiles[start : start + query_tile_size])
+        else:
+            out.index_copy_(0, output_indices.reshape(-1), tiles)
         return out
     return output

@@ -94,13 +94,26 @@ class JaggedPlanVariant:
 
 
 def jagged_plan_variants(
-    max_tokens, max_seqs, max_seq_len, block_size, query_capacity, sliding_window=None
+    max_tokens,
+    max_seqs,
+    max_seq_len,
+    block_size,
+    query_capacity,
+    sliding_window=None,
+    *,
+    min_query_tile_size=64,
 ):
     """Enumerate the independent group shapes needed by automatic mixed dispatch."""
+    if min_query_tile_size not in (16, 32, 64):
+        raise ValueError("minimum query tile must have 16, 32 or 64 rows")
     max_width = min(512, 1 << ((query_capacity - 1).bit_length() - 1))
     costs: dict[int, dict[int, int]] = {}
     for count in range(1, min(max_tokens, max_seq_len) + 1):
-        width = 1 if count <= 8 else min(max_width, max(64, 1 << (count - 1).bit_length()))
+        width = (
+            1
+            if count <= 8
+            else min(max_width, max(min_query_tile_size, 1 << (count - 1).bit_length()))
+        )
         tiles = (count + width - 1) // width
         costs.setdefault(width, {}).setdefault(tiles, count)
     max_pages = (max_seq_len + block_size - 1) // block_size
@@ -205,9 +218,10 @@ def _build_group_plan(
     sliding_window,
     max_parallel_entries,
     workspace,
+    batch_parallel=False,
 ):
-    if width <= 0 or (width != 1 and width % INT32_ELEMS_PER_STICK):
-        raise ValueError("query tiles must be one row or contain whole int32 index sticks")
+    if width <= 0 or (width not in (1, 16) and width % INT32_ELEMS_PER_STICK):
+        raise ValueError("query tiles must be 1/16 rows or contain whole int32 index sticks")
     if query_capacity <= width:
         raise ValueError("query_capacity must cover the packed input and exceed one query tile")
     starts, lengths, pages, query_lens = inputs
@@ -242,7 +256,8 @@ def _build_group_plan(
         tile_ids = np.arange(tile_capacity)[:, None]
         page_slots = np.arange(page_capacity)[None, :]
     else:
-        entries = min(max_parallel_entries, page_capacity & -page_capacity)
+        capacity = page_capacity * tile_capacity if batch_parallel else page_capacity
+        entries = min(max_parallel_entries, capacity & -capacity)
         queries_per_group = min(entries, tile_capacity & -tile_capacity)
         slots = entries // queries_per_group
         groups = tile_capacity // queries_per_group
@@ -347,10 +362,14 @@ def build_jagged_mixed_plan(
     decode_threshold: int = 8,
     max_parallel_entries: int = INT32_ELEMS_PER_STICK,
     workspace: JaggedPlanWorkspace | None = None,
+    batch_parallel: bool = False,
+    min_query_tile_size: int = 64,
 ) -> JaggedMixedPlan:
     """Build final query-width groups directly in the original packed row space."""
-    if query_tile_size not in (0, 64, 128, 256, 512):
-        raise ValueError("mixed query tiles must be automatic or 64/128/256/512 rows")
+    if query_tile_size not in (0, 16, 32, 64, 128, 256, 512):
+        raise ValueError("mixed query tiles must be automatic or 16/32/64/128/256/512 rows")
+    if min_query_tile_size not in (16, 32, 64):
+        raise ValueError("minimum query tile must have 16, 32 or 64 rows")
     if decode_threshold < 1:
         raise ValueError("decode_threshold must be positive")
     if max_parallel_entries < 1 or max_parallel_entries & (max_parallel_entries - 1):
@@ -367,7 +386,8 @@ def build_jagged_mixed_plan(
         width = (
             1
             if count <= decode_threshold
-            else query_tile_size or min(max_width, max(64, 1 << (count - 1).bit_length()))
+            else query_tile_size
+            or min(max_width, max(min_query_tile_size, 1 << (count - 1).bit_length()))
         )
         groups.setdefault(width, []).append(seq)
     plans = [
@@ -383,6 +403,7 @@ def build_jagged_mixed_plan(
             sliding_window,
             max_parallel_entries if width == 1 else None,
             workspace,
+            batch_parallel,
         )
         for width, seqs in sorted(groups.items())
     ]
@@ -436,6 +457,7 @@ def build_jagged_decode_plan(
     sliding_window: int | None = None,
     max_parallel_entries: int = INT32_ELEMS_PER_STICK,
     workspace: JaggedPlanWorkspace | None = None,
+    batch_parallel: bool = False,
 ) -> JaggedTilePlan:
     """Write grouped query/chunk/entry tables directly into their final layout."""
     if query_tile_size != 1:
@@ -457,6 +479,7 @@ def build_jagged_decode_plan(
         sliding_window,
         max_parallel_entries,
         workspace,
+        batch_parallel,
     )
 
 

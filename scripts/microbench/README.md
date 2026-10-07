@@ -11,8 +11,9 @@ time attributed to a `record_function` span is the signal for that harness.
 `jagged_attn_latency.py` compares the real head-major backend with jagged attention
 using resident Q/KV and metadata. It times backend dispatch, output stores/copies
 and synchronization. It excludes compilation, metadata construction/transfers,
-Q staging, KV insertion and the surrounding model. Use an idle card and a
-profiler-free torch-spyre build; the harness rejects extensions linked to libaiupti.
+Q staging, KV insertion and the surrounding model. Use an idle card and keep the
+same torch-spyre build and lower-stack libraries across comparisons. Profiler-enabled
+builds are supported; ordinary latency samples run with the profiler inactive.
 
 ```bash
 SPYRE_DEVICES=0 SPYRE_NUM_CPUS=8 DXP_LOOP_UNROLL=0 \
@@ -29,6 +30,8 @@ sample order. `L` denotes the maximum total sequence length, including new token
 | --- | --- | --- |
 | `decode1` | `[1]` | `[L]` |
 | `decode4` | `[1,1,1,1]` | `[L, 7L/8-13, 3L/4+7, 5L/8+17]` |
+| `verify4` | `[16,16,16,16]`, causal | `[L, 7L/8-13, 3L/4+7, 5L/8+17]` |
+| `draft4` | `[16,16,16,16]`, noncausal | `[L, 7L/8-13, 3L/4+7, 5L/8+17]` |
 | `prefill512` | `[512]` | `[L]` |
 | `mixed512` | `[1,511]` | `[L, 3L/4+17]` |
 | `jagged69` | `[1,65,3]` | `[L, 3L/4+17, L/2+33]` |
@@ -38,6 +41,31 @@ schedule, 64 parallel decode entries and shared output staging. Compare matching
 output-buffer modes: `--output-buffer model` uses model-sized outputs for pure
 decode, while the default uses paired staging. Pre-staged prefill/mixed calls
 require paired staging and cannot use a separate model-sized output.
+
+Two opt-in serving experiments use that same schedule:
+
+- `--jagged-batch-parallel 1` sizes the decode entry group using both request
+  tiles and pages, up to the existing parallel-entry limit. The default is `0`.
+- `--jagged-min-query-tile 16` permits smaller speculative query tiles. Supported
+  minima are 16, 32 and 64; the default is 64. Groups with at most eight queries
+  still use the decode kernel.
+
+The corresponding serving variables are `SPYRE_JAGGED_BATCH_PARALLEL` and
+`SPYRE_JAGGED_MIN_QUERY_TILE`. Warmup and runtime use the same settings. Compare
+four runs with `(parallel, minimum tile)` equal to `(0,64)`, `(1,64)`, `(0,16)`
+and `(1,16)` to isolate the two changes and their combination.
+
+`--profile-dir traces` records three additional calls per backend and case after
+the unprofiled latency samples. It requires a working Spyre profiler build and
+keeps those calls out of the latency statistics. Results include source,
+extension, compiler and loaded lower-stack library hashes. Changed binaries or
+graphs compiled during timing invalidate the run.
+
+The regular path in this attention-only harness uses its default query buckets
+`[1,512]`. Its 16-token verification/draft calls therefore include padding to 512.
+Use jagged control versus experimental arms to measure these scheduling changes;
+use the request harness below for a serving comparison with smaller query buckets.
+Do not set `SPYRE_ATTN_QUERY_BUCKETS` for this harness.
 
 The experimental schedules are `flat`, `nested`, `page_parallel`, `split` and
 `mixed`. They permit common query widths, alternative parallel-entry budgets and
@@ -165,6 +193,24 @@ tokens, acceptance, proposal batch histograms, and token-arrival schedules also
 match. Latency differences with unequal work must be interpreted with those
 differences. More concurrent requests require enough output tokens or prefill
 budget to keep early arrivals active until the last prompt finishes prefilling.
+
+The batch harness also accepts `--jagged-batch-parallel` and
+`--jagged-min-query-tile`. Use fresh processes and separate output paths for each
+arm. These are experimental settings, so the existing regular/jagged summarizer
+requires matching values; comparisons between different settings must explicitly
+check output tokens, acceptance and scheduling work as well as stack hashes.
+
+`--profile-output batch4.trace.json` records one extra request wave after the
+unprofiled repeats. Its tokens and compilation count are checked, and its timings
+are stored separately as `profile_run`. The summary contains only unprofiled
+repeats. On the rebuilt profiler stack, kernel/DMA correlation IDs can associate
+device work with host submissions. Host and device clocks can have an offset:
+do not use their absolute timestamps to estimate queue delay. Sum unions of
+device intervals to account for overlap, and report host copy/dispatch counters
+as inclusive waits rather than exclusive transfer time.
+
+Measured experiment results and remaining bottlenecks are recorded in
+[XPress jagged scheduling](../../docs/architecture/xpress-jagged-scheduling.md).
 
 ## Run
 
@@ -391,12 +437,17 @@ the runner's `gc.collect()`, so it accumulates across a sweep; affected rows get
 
 ## Attribution
 
-Two Kineto limitations, both confirmed on hardware, force interval-overlap
-attribution:
+The original `spyre_attn_microbench.py` attribution was designed for an older
+profiler stack with two limitations:
 
 1. Device time is not propagated to `record_function` parents — every span reports
    `self_device_time_total == 0.0`.
-2. AIUPTI populates no correlation ids, so there is no CPU↔device linkage.
+2. That AIUPTI version populated no correlation IDs, so there was no CPU↔device linkage.
+
+The rebuilt stack used by the XPress scheduling experiments does provide IDs for
+kernel and copy submissions, although memsets remain uncorrelated. The notes below
+describe this older harness's interval attribution; use the correlation-aware
+analysis for the newer latency traces, especially when host/device clocks differ.
 
 Each kernel is therefore attributed to the innermost span containing the kernel's
 **start** timestamp. Start-based rather than containment-based because dispatch is
