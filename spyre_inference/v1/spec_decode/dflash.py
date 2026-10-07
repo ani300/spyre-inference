@@ -62,9 +62,13 @@ class SpyreDFlashProposer(DFlashProposer):
         self.draft_block_size = self.num_speculative_tokens + 1
         self.proposal_seconds = 0.0
         self.proposal_calls = 0
+        self.proposal_requests = 0
+        self.proposal_padded_requests = 0
+        self.proposal_batch_sizes = [0] * 5
         self.context_tokens = 0
         self.context_seconds = 0.0
         self.draft_forward_seconds = 0.0
+        self._warmed_draft_batches: set[int] = set()
 
     def initialize_attn_backend(self, kv_cache_config, kernel_block_sizes=None):
         super().initialize_attn_backend(kv_cache_config, kernel_block_sizes)
@@ -84,15 +88,21 @@ class SpyreDFlashProposer(DFlashProposer):
         context = self.model.combine_hidden_states(convert(features, self.spyre_device))
         self.model.precompute_and_store_context_kv(context, convert(positions, self.spyre_device))
         block = self.draft_block_size
-        attn_layer.publish_null_slots(block)
-        ids = torch.full((block,), self.parallel_drafting_token_id, dtype=torch.int64)
-        ids[0] = 0
-        with set_forward_context(None, self.vllm_config, num_tokens=block, slot_mapping={}):
-            hidden = self.model(
-                input_ids=convert(ids, self.spyre_device),
-                positions=convert(torch.arange(block), self.spyre_device),
-            )
-        self.model.propose_block(hidden, ids[:1])
+        largest_batch = 1 << (self.max_batch_size - 1).bit_length()
+        for batch in (4, 2, 1):
+            if batch > largest_batch or batch in self._warmed_draft_batches:
+                continue
+            rows = batch * block
+            attn_layer.publish_null_slots(rows)
+            ids = torch.full((rows,), self.parallel_drafting_token_id, dtype=torch.int64)
+            ids[::block] = 0
+            with set_forward_context(None, self.vllm_config, num_tokens=rows, slot_mapping={}):
+                hidden = self.model(
+                    input_ids=convert(ids, self.spyre_device),
+                    positions=convert(torch.arange(block).repeat(batch), self.spyre_device),
+                )
+            self.model.propose_block(hidden, ids[::block])
+            self._warmed_draft_batches.add(batch)
 
     def propose_spyre(
         self,
@@ -102,16 +112,33 @@ class SpyreDFlashProposer(DFlashProposer):
         spec_decode_metadata,
         common_attn_metadata,
         *,
-        skip_proposal: bool = False,
+        skip_proposal: bool | list[bool] = False,
+        max_model_len: int | None = None,
     ):
         """Commit accepted context even when the request needs no further proposals."""
         started = time.perf_counter()
-        if len(sampled_token_ids) != 1 or aux_hidden_states is None:
-            raise ValueError("Spyre DFlash needs one request and its auxiliary hidden states")
-        sampled = sampled_token_ids[0]
+        num_reqs = len(sampled_token_ids)
+        if not 1 <= num_reqs <= 4 or aux_hidden_states is None:
+            raise ValueError(
+                "Spyre DFlash needs sampled requests and their auxiliary hidden states"
+            )
+        starts = common_attn_metadata.query_start_loc_cpu.tolist()
         scheduled = target_positions.shape[0]
-        drafts = spec_decode_metadata.num_draft_tokens[0] if spec_decode_metadata else 0
-        valid = accepted_context_length(scheduled, drafts, len(sampled))
+        if (
+            len(starts) != num_reqs + 1
+            or starts[0] != 0
+            or starts[-1] != scheduled
+            or any(end <= start for start, end in zip(starts, starts[1:]))
+        ):
+            raise ValueError("DFlash request boundaries must partition the scheduled target rows")
+        skip = [skip_proposal] * num_reqs if isinstance(skip_proposal, bool) else skip_proposal
+        if len(skip) != num_reqs:
+            raise ValueError("DFlash proposal mask must have one entry per request")
+        drafts = spec_decode_metadata.num_draft_tokens if spec_decode_metadata else [0] * num_reqs
+        if len(drafts) != num_reqs:
+            raise ValueError("DFlash draft counts must have one entry per request")
+        block = self.draft_block_size
+        limit = self.max_model_len if max_model_len is None else max_model_len
 
         # Pad positions/slots to the target body bucket. Rejected and padded
         # rows write only the reserved null page, never the request's suffix.
@@ -119,45 +146,63 @@ class SpyreDFlashProposer(DFlashProposer):
         rows = features.shape[0]
         positions = F.pad(target_positions[:scheduled], (0, rows - scheduled))
         slots = torch.zeros(rows, dtype=torch.int64)
-        slots[:valid] = common_attn_metadata.slot_mapping[:valid]
+        active, context_ends, anchors = [], [], []
+        for request, sampled in enumerate(sampled_token_ids):
+            start, end = starts[request : request + 2]
+            valid = accepted_context_length(end - start, drafts[request], len(sampled))
+            slots[start : start + valid] = common_attn_metadata.slot_mapping[start : start + valid]
+            self.context_tokens += valid
+            if sampled and not skip[request]:
+                context_end = int(target_positions[start + valid - 1]) + 1
+                if context_end + block <= limit:
+                    active.append(request)
+                    context_ends.append(context_end)
+                    anchors.append(sampled[-1])
         context = self.model.combine_hidden_states(features)
         self.model.precompute_and_store_context_kv(
             context, convert(positions, self.spyre_device), slots
         )
-        self.context_tokens += valid
         self.context_seconds += time.perf_counter() - started
-        if not sampled or skip_proposal:
-            return [[]]
+        result: list[list[int]] = [[] for _ in range(num_reqs)]
+        if not active:
+            return result
 
-        block = self.draft_block_size
-        context_end = int(target_positions[valid - 1]) + 1
-        positions = torch.arange(context_end, context_end + block, dtype=torch.int64)
-        block_table = common_attn_metadata.block_table_tensor[:1]
-        slots = block_table[0, positions // self.block_size].long() * self.block_size
-        slots += positions % self.block_size
-        query_start = torch.tensor([0, block], dtype=torch.int32)
-        seq_lens = torch.tensor([context_end + block], dtype=torch.int32)
+        padded_batch = 1 << (len(active) - 1).bit_length()
+        num_tokens = padded_batch * block
+        actual_tokens = len(active) * block
+        positions = torch.zeros(num_tokens, dtype=torch.int64)
+        slots = torch.zeros(num_tokens, dtype=torch.int64)
+        ids = torch.full((num_tokens,), self.parallel_drafting_token_id, dtype=torch.int64)
+        ids[::block] = 0
+        block_table = common_attn_metadata.block_table_tensor[active]
+        for index, (context_end, anchor) in enumerate(zip(context_ends, anchors, strict=True)):
+            rows = slice(index * block, (index + 1) * block)
+            pos = torch.arange(context_end, context_end + block, dtype=torch.int64)
+            positions[rows] = pos
+            slots[rows] = block_table[index, pos // self.block_size].long() * self.block_size
+            slots[rows] += pos % self.block_size
+            ids[index * block] = anchor
+        query_start = torch.arange(0, actual_tokens + 1, block, dtype=torch.int32)
+        seq_lens = torch.tensor(context_ends, dtype=torch.int32) + block
         metadata = CommonAttentionMetadata(
             query_start_loc=query_start,
             query_start_loc_cpu=query_start,
             seq_lens=seq_lens,
             seq_lens_cpu_upper_bound=seq_lens,
-            num_reqs=1,
-            num_actual_tokens=block,
+            num_reqs=len(active),
+            num_actual_tokens=actual_tokens,
             max_query_len=block,
-            max_seq_len=context_end + block,
+            max_seq_len=int(seq_lens.max()),
             block_table_tensor=block_table,
             slot_mapping=slots,
             causal=False,
         )
         _, per_layer = self.build_per_group_and_layer_attn_metadata(metadata)
-        ids = torch.full((block,), self.parallel_drafting_token_id, dtype=torch.int64)
-        ids[0] = sampled[-1]
         forward_started = time.perf_counter()
         with set_forward_context(
             per_layer,
             self.vllm_config,
-            num_tokens=block,
+            num_tokens=num_tokens,
             slot_mapping={name: slots for name in self._draft_attn_layer_names},
         ):
             hidden = self.model(
@@ -165,7 +210,12 @@ class SpyreDFlashProposer(DFlashProposer):
                 positions=convert(positions, self.spyre_device),
             )
         self.draft_forward_seconds += time.perf_counter() - forward_started
-        proposals = self.model.propose_block(hidden, ids[:1])
+        proposals = self.model.propose_block(hidden, ids[::block])
+        for request, proposal in zip(active, proposals[: len(active)], strict=True):
+            result[request] = proposal
         self.proposal_calls += 1
+        self.proposal_requests += len(active)
+        self.proposal_padded_requests += padded_batch
+        self.proposal_batch_sizes[len(active)] += 1
         self.proposal_seconds += time.perf_counter() - started
-        return proposals
+        return result

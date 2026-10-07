@@ -52,9 +52,9 @@ def validate_dflash_config(config) -> None:
     if (
         parallel.tensor_parallel_size != 1
         or parallel.pipeline_parallel_size != 1
-        or config.scheduler_config.max_num_seqs != 1
+        or not 1 <= config.scheduler_config.max_num_seqs <= 4
     ):
-        raise ValueError("Spyre DFlash/XPress currently requires TP=1, PP=1 and max_num_seqs=1")
+        raise ValueError("Spyre DFlash/XPress currently requires TP=1, PP=1 and max_num_seqs<=4")
     if config.cache_config.enable_prefix_caching:
         raise ValueError(
             "Disable prefix caching for Spyre DFlash/XPress: draft context needs every target state"
@@ -63,8 +63,11 @@ def validate_dflash_config(config) -> None:
         raise ValueError("Spyre DFlash/XPress currently supports the Qwen3 text target")
     if spec.draft_sample_method != "greedy":
         raise ValueError("Spyre DFlash/XPress currently uses greedy proposals")
-    if config.scheduler_config.max_num_batched_tokens < spec.num_speculative_tokens + 1:
-        raise ValueError("max_num_batched_tokens must accommodate a complete draft block")
+    padded_batch = 1 << (config.scheduler_config.max_num_seqs - 1).bit_length()
+    if config.scheduler_config.max_num_batched_tokens < padded_batch * (
+        spec.num_speculative_tokens + 1
+    ):
+        raise ValueError("max_num_batched_tokens must accommodate a complete padded draft batch")
     if draft.hidden_size != target.hidden_size or draft.vocab_size != target.vocab_size:
         raise ValueError("The draft must share the target hidden size and full vocabulary")
     if getattr(draft, "draft_vocab_size", draft.vocab_size) not in (None, target.vocab_size):

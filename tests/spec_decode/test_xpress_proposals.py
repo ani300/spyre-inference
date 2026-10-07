@@ -12,11 +12,14 @@ from spyre_inference.v1.spec_decode.xpress_head import XPressRefinerHead
 
 @pytest.mark.parametrize("topc", [0, 1, 7, 73])
 @pytest.mark.parametrize("passes", [0, 2, 6])
-def test_serving_selection_loop_matches_reference_and_transfers_only_candidate_scores(topc, passes):
+@pytest.mark.parametrize("batch", [1, 2, 3, 4])
+def test_serving_selection_loop_matches_reference_and_transfers_only_candidate_scores(
+    topc, passes, batch
+):
     torch.manual_seed(81)
     head = XPressRefinerHead(73, 128, 16, rank=64, mlp_hidden=128, topc=topc).eval()
-    hidden, base = torch.randn(16, 128), torch.randn(16, 73)
-    anchor = torch.tensor([3])
+    hidden, base = torch.randn(batch * 16, 128), torch.randn(batch * 16, 73)
+    anchor = torch.arange(batch) + 3
     model = SimpleNamespace(
         xpress_head=head,
         xpress_num_passes=passes,
@@ -43,7 +46,16 @@ def test_serving_selection_loop_matches_reference_and_transfers_only_candidate_s
     for name in ("_copy_logits_to_cpu", "_argmax_on_cpu"):
         setattr(model, name, MethodType(getattr(SpyreDFlashQwen3ForCausalLM, name), model))
     with torch.inference_mode():
-        expected = head(base[None], hidden[None], anchor, anchor, passes).tolist()
+        expected = [
+            head(
+                base.view(batch, 16, 73)[i : i + 1],
+                hidden.view(batch, 16, 128)[i : i + 1],
+                anchor[i : i + 1],
+                anchor[i : i + 1],
+                passes,
+            )[0].tolist()
+            for i in range(batch)
+        ]
         actual = SpyreDFlashQwen3ForCausalLM.propose_block(model, hidden, anchor)
     assert actual == expected
-    assert model.logits_transfer_bytes == (16 * 73 + passes * 15 * (topc or 73)) * 4
+    assert model.logits_transfer_bytes == batch * (16 * 73 + passes * 15 * (topc or 73)) * 4

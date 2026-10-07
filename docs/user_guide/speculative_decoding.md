@@ -6,11 +6,11 @@ refines the proposed block, then uses vLLM's target verification and output
 processing. Speculation is opt-in.
 
 The current scope is compiled execution, unquantized FP16
-target and draft weights, TP=1, PP=1, one active request, greedy target sampling,
+target and draft weights, TP=1, PP=1, up to four active requests, greedy target sampling,
 and disabled prefix caching. The published
 checkpoint has a fixed 16-position block: one anchor and 15 draft tokens.
 Changing `num_speculative_tokens` alone does not create a smaller compatible
-checkpoint. Continuous batching, stochastic target sampling, tensor parallelism,
+checkpoint. Stochastic target sampling, tensor parallelism, larger batches,
 and prefix-cache reuse need further integration and validation.
 
 ## Run Qwen3-8B
@@ -41,6 +41,22 @@ backbone without refinement. Set `xpress_topc` to `0` for full-vocabulary
 refinement. Omit `speculative_config` for ordinary decoding.
 Keep prompt formatting, thinking mode, output limits, dtype, and context length
 identical when comparing these modes.
+
+For four concurrent requests, set `--max-num-seqs 4`, use a token budget of at
+least 128, and set `compile_sizes` to `[1, 16, 32, 64, 128]`. The scheduler
+reserves 15 drafting slots in addition to each 16-token verification block:
+four full requests need 124 slots. The adapter's buffer-capacity minimum is 64,
+which is sufficient to store four draft blocks but limits verification concurrency.
+Three active drafts pad to four blocks, so configuring `max_num_seqs=3` also
+requires capacity for 64 draft tokens. `SPYRE_MAX_NUM_PARTIAL_PREFILLS=4` permits overlapping prefills; the
+default admits only one prefilling request at a time. A larger token budget
+can help long prompts reach the decode phase together.
+
+Each request commits its own accepted target rows to draft KV pages. Active
+requests then share one draft forward with independent positions, block tables,
+and anchors. Partial prefills still commit context. Requests at their output or
+context limit stop proposing individually. Rejected and padding rows use the
+reserved null page.
 
 This adapter uses vLLM 0.28's legacy DFlash runner contract. Like the upstream PR,
 `method="dflash"` detects XPress from the checkpoint architecture. The previous
@@ -111,7 +127,7 @@ the initial full-vocabulary logits go to CPU once for argmax and top-k. The
 candidate IDs and scores are uploaded once, and their readout weight rows are
 gathered on Spyre once. With block size 16, C512 and vocabulary size 512–262144,
 each pass selects candidate scores and assembles predecessor IDs on Spyre;
-only the final 15 int32 proposal IDs return to CPU. Exact vocabulary IDs and
+only the final 15 int32 proposal IDs per request return to CPU. Exact vocabulary IDs and
 first-index ties are preserved. Other configurations transfer each pass's scores
 to CPU for argmax and upload the selected IDs. With top-C=0, those scores cover
 the full vocabulary, restricted to the 15 predicted rows.
@@ -122,9 +138,11 @@ the logical FP32 host payload, not measured PCIe traffic;
 `candidate_transfer_bytes` estimates uploaded int32 IDs, FP16 scores and the
 native selector's two-digit ID table. `proposal_id_transfer_bytes` counts final
 native proposal IDs; device selection has separate count and time counters.
-The native path's initial 2,048-byte predecessor upload is outside the candidate
+The native path's initial 2,048-byte predecessor upload per padded request is outside the candidate
 counter. The proposer
-also records context projection and draft-forward time. These counters are
+also records context projection and draft-forward time, total proposals per
+request, padded proposal blocks, and a histogram of actual proposal batch sizes.
+These counters are
 available through the model runner for profiling; they are not a public metrics
 API. Host wall-clock intervals are diagnostic; asynchronous device work can be
 charged to the next transfer, so these counters are not exclusive kernel times.
@@ -154,6 +172,12 @@ The performance branch also skips unused proposals at the output limit and uses
 KV-only draft context projection. See [the performance report](../architecture/xpress-performance.md)
 for measurements, validation scope and remaining work.
 
+Batched native selection uses separate low/high ID buffers and separate compiled
+stages for digit selection and feedback assembly. Combining the stages or indexing
+a stacked digit buffer can produce incorrect IDs on the validated lower stack.
+Candidate readout indices are flattened before upload to avoid a batched gather
+page-layout compiler error.
+
 ## Validation
 
 CPU contract, recurrence, and rejection tests:
@@ -181,6 +205,23 @@ exactly, including after cancellation. Cross-shape deep-layer cache errors are
 recorded separately because FP16 block and single-token execution can diverge
 numerically. Use a separate engine without `speculative_config` when measuring
 ordinary decoding's latency and memory.
+
+`tests/e2e/test_xpress_batch.py` exercises four concurrent requests, mixed
+acceptance, partial prefills, per-request limits, shrinking batches, token stops,
+and cache reuse after cancellation. Run it separately with
+`SPYRE_JAGGED_ATTENTION=0` and `1`. It captures committed target/draft cache
+prefixes before finished requests release their pages and compares different
+rejected tails under the same acceptance schedule.
+One short prompt has a measured target margin of 0.03125 that ties or reverses
+under block execution. Its cross-shape output check allows only that
+bounded near-tie case and compares cache positions with identical
+inputs; other prompt outputs and same-schedule cache checks remain exact.
+`tests/e2e/test_xpress_feedback.py` checks device selection at batches 1, 2, and 4,
+including tied scores and large vocabulary IDs. The batch request benchmark and
+comparison commands are in the
+[microbenchmark guide](../../scripts/microbench/README.md#batched-xpress-request-latency).
+The [batch-four report](../architecture/xpress-batch4.md) describes the packed
+proposer, scheduler budget, device-layout fixes and remaining transfer costs.
 
 Run Spyre tests serially, selecting a free card with `SPYRE_DEVICES`. CPU-only
 green tests do not establish device support. The original full-vocabulary

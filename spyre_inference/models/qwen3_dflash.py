@@ -22,18 +22,24 @@ from spyre_inference.v1.spec_decode.checkpoint import validate_dflash_weights
 from spyre_inference.v1.spec_decode.xpress_head import XPressRefinerHead
 
 
-def _select_with_feedback(scores, candidate_parts, order, previous):
+def _select_candidate_parts(scores, candidate_parts, order):
     maxima = scores.amax(dim=-1, keepdim=True)
     first = torch.where(scores == maxima, order, scores.shape[-1]).amin(dim=-1, keepdim=True)
     # Two base-512 digits preserve vocabulary IDs without widening the mask,
     # whose FP32 layout cannot be combined with a host-uploaded ID table.
     low = torch.where(order == first, candidate_parts[0], 0.0).sum(dim=-1)
     high = torch.where(order == first, candidate_parts[1], 0.0).sum(dim=-1)
+    return low, high
+
+
+def _assemble_feedback(low, high, previous):
     draft = (low.float() + high.float() * 512).to(torch.int32)
     # Whole int32 sticks let concat write token rows without an offset-two
     # mutation inside a stick. Keep this layout from the initial upload.
-    tail = draft.reshape(-1, 1)[:-1].expand(-1, 32)
-    previous = torch.cat((previous[:2], tail), dim=0)
+    batch, slots = draft.shape
+    tail = draft.unsqueeze(-1).expand(-1, -1, 32)[:, :-1]
+    anchors = previous.view(batch, slots + 1, 32)[:, :2]
+    previous = torch.cat((anchors, tail), dim=1).reshape(-1, 32)
     return draft, previous
 
 
@@ -168,9 +174,18 @@ class SpyreDFlashQwen3ForCausalLM(DFlashQwen3ForCausalLM):
                 self._feedback_order = torch.arange(512, dtype=torch.float16).to(
                     head.w1.weight.device
                 )
-                self._select_with_feedback = torch.compile(
-                    _select_with_feedback, fullgraph=True, dynamic=False
+                # Fusing digit reduction with feedback assembly can alias the
+                # low/high temporaries on batched refiner output layouts.
+                self._select_candidate_parts = torch.compile(
+                    _select_candidate_parts, fullgraph=True, dynamic=False
                 )
+                self._assemble_feedback = torch.compile(
+                    _assemble_feedback, fullgraph=True, dynamic=False
+                )
+
+    def _select_with_feedback(self, scores, parts, order, previous):
+        low, high = self._select_candidate_parts(scores, parts, order)
+        return self._assemble_feedback(low, high, previous)
 
     def combine_hidden_states(self, hidden_states):
         return self._combine(hidden_states)
@@ -201,15 +216,17 @@ class SpyreDFlashQwen3ForCausalLM(DFlashQwen3ForCausalLM):
         return result
 
     def propose_block(self, hidden_states, anchor_ids):
+        batch = anchor_ids.numel()
+        hidden_blocks = hidden_states.view(batch, -1, hidden_states.shape[-1])
         started = time.perf_counter()
-        base = self.compute_device_logits(hidden_states).unsqueeze(0)
+        base = self.compute_device_logits(hidden_states).view(batch, hidden_blocks.shape[1], -1)
         self.logits_seconds += time.perf_counter() - started
         host_base = self._copy_logits_to_cpu(base)[:, 1:]
         draft = self._argmax_on_cpu(host_base)
         device_feedback = False
         if self.xpress_head is not None and self.xpress_num_passes:
             started = time.perf_counter()
-            cache = self._hidden_cache(hidden_states.unsqueeze(0))
+            cache = self._hidden_cache(hidden_blocks)
             self.refiner_seconds += time.perf_counter() - started
             candidates = readout = None
             base = base[:, 1:]
@@ -220,7 +237,8 @@ class SpyreDFlashQwen3ForCausalLM(DFlashQwen3ForCausalLM):
                 )
                 self.host_topk_seconds += time.perf_counter() - started
                 started = time.perf_counter()
-                candidate_ids = convert(candidates, device=hidden_states.device)
+                # A flat index avoids Spyre gather page splits across request axes.
+                candidate_ids = convert(candidates.flatten(), device=hidden_states.device)
                 base = convert(base_c, device=hidden_states.device, dtype=hidden_states.dtype)
                 self.host_to_device_seconds += time.perf_counter() - started
                 self.candidate_transfer_bytes += candidates.numel() * 4 + base.numel() * 2
@@ -233,10 +251,10 @@ class SpyreDFlashQwen3ForCausalLM(DFlashQwen3ForCausalLM):
             if device_feedback:
                 assert candidates is not None
                 started = time.perf_counter()
-                parts = convert(
-                    torch.stack((candidates % 512, candidates // 512)),
-                    hidden_states.device,
-                    dtype=hidden_states.dtype,
+                # Separate buffers avoid offset views into a stacked ID table.
+                parts = tuple(
+                    convert(part, hidden_states.device, dtype=hidden_states.dtype)
+                    for part in (candidates % 512, candidates // 512)
                 )
                 previous = torch.cat(
                     (anchor_ids[:, None], anchor_ids[:, None], draft[:, :-1]), dim=1
@@ -247,11 +265,11 @@ class SpyreDFlashQwen3ForCausalLM(DFlashQwen3ForCausalLM):
                     dtype=torch.int32,
                 )
                 self.host_to_device_seconds += time.perf_counter() - started
-                self.candidate_transfer_bytes += parts.numel() * parts.element_size()
+                self.candidate_transfer_bytes += sum(p.numel() * p.element_size() for p in parts)
             for _ in range(self.xpress_num_passes):
                 # Match the pinned serving PR: the anchor is its own predecessor.
                 if device_feedback:
-                    previous = feedback[:, 0].view(1, -1)
+                    previous = feedback[:, 0].view(batch, -1)
                 else:
                     previous = torch.cat(
                         (anchor_ids[:, None], anchor_ids[:, None], draft[:, :-1]), dim=1

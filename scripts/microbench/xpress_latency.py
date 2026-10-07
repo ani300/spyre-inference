@@ -33,6 +33,7 @@ def _worker_state(worker, prepare=False):
 
     import torch
     import torch_spyre
+    from torch._dynamo.utils import counters as compile_counters
     from torch_spyre.ops.fallbacks import FallbackWarning
 
     import spyre_inference
@@ -49,7 +50,8 @@ def _worker_state(worker, prepare=False):
         for name in runner._spyre_kv_caches
     }
     memory = torch.spyre.memory.memory_stats(0)
-    model = runner.drafter.model
+    drafter = getattr(runner, "drafter", None)
+    model = drafter.model if drafter is not None else None
     counters = {
         key: getattr(model, key)
         for key in (
@@ -67,6 +69,7 @@ def _worker_state(worker, prepare=False):
             "device_selection_seconds",
             "proposal_id_transfer_bytes",
         )
+        if model is not None
     }
     return {
         "torch": torch.__version__,
@@ -78,15 +81,20 @@ def _worker_state(worker, prepare=False):
         "allocated_bytes": memory["allocated_bytes.all.current"],
         "peak_allocated_bytes": memory["allocated_bytes.all.peak"],
         "counters": counters,
+        "unique_graphs": compile_counters["stats"]["unique_graphs"],
+        "proposal_batch_sizes": list(drafter.proposal_batch_sizes) if drafter else [0] * 5,
         "drafter_counters": {
-            key: getattr(runner.drafter, key)
+            key: getattr(drafter, key)
             for key in (
                 "proposal_calls",
+                "proposal_requests",
+                "proposal_padded_requests",
                 "proposal_seconds",
                 "context_tokens",
                 "context_seconds",
                 "draft_forward_seconds",
             )
+            if drafter is not None
         },
     }
 

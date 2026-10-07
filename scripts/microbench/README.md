@@ -130,6 +130,42 @@ attention speedup. Host copy and dispatch intervals include pending device work;
 they do not provide exclusive kernel durations or DMA bandwidth. Each JSON file
 has a `complete` flag, and the summarizer rejects incomplete runs.
 
+## Batched XPress request latency
+
+For four concurrent XPress requests, use `xpress_batch_latency.py`. It pauses
+scheduling while queuing four prompts and requires the worker to observe a proposal batch of
+four. It records per-request TTFT, effective TPOT and token arrival bursts,
+aggregate output throughput, acceptance, proposal batch sizes, source and
+loaded-library hashes, and new graph counts. Measurements fail if a timed run
+compiles a new graph. Use the same development environment, worktrees, card,
+and model cache for both modes. Timing begins immediately before resuming
+scheduling and includes that wake-up call; admission and state RPCs are excluded.
+
+Use `--mode ordinary` for a separate engine without a drafter. Run both
+attention settings again with distinct output paths to measure the same
+four-request workload under ordinary decoding. This mode requires four
+requests to produce output in the same engine step.
+
+```bash
+SPYRE_DEVICES=2 uv run --no-sync python scripts/microbench/xpress_batch_latency.py \
+  --jagged 0 --prompt-lengths 32 127 255 383 --max-tokens 128 \
+  --max-model-len 512 --token-budget 256 --warmup 1 --repeats 3 \
+  --output regular-batch4.json
+SPYRE_DEVICES=2 uv run --no-sync python scripts/microbench/xpress_batch_latency.py \
+  --jagged 1 --prompt-lengths 32 127 255 383 --max-tokens 128 \
+  --max-model-len 512 --token-budget 256 --warmup 1 --repeats 3 \
+  --output jagged-batch4.json
+python scripts/microbench/summarize_xpress_batch_latency.py \
+  --regular regular-batch4.json --jagged jagged-batch4.json \
+  --output batch4-comparison.json
+```
+
+The summarizer requires matching settings and stack hashes and reports whether
+tokens, acceptance, proposal batch histograms, and token-arrival schedules also
+match. Latency differences with unequal work must be interpreted with those
+differences. More concurrent requests require enough output tokens or prefill
+budget to keep early arrivals active until the last prompt finishes prefilling.
+
 ## Run
 
 ```bash

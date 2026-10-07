@@ -745,6 +745,12 @@ class TorchSpyreModelRunner(GPUModelRunner):
             keep_aux_hidden_states_on_device=self.use_aux_hidden_state_outputs,
         )
 
+    def _input_fits_in_drafter(self, common_attn_metadata):
+        if self.speculative_config is not None and self.speculative_config.use_dflash():
+            # Commit each request's context, then decide which individual drafts fit.
+            return common_attn_metadata is not None
+        return super()._input_fits_in_drafter(common_attn_metadata)
+
     def propose_draft_token_ids(
         self,
         scheduler_output,
@@ -761,13 +767,16 @@ class TorchSpyreModelRunner(GPUModelRunner):
         if self.speculative_config.use_dflash():
             if not sampling_metadata.all_greedy:
                 raise ValueError("Spyre DFlash/XPress currently supports greedy target decoding")
-            request = self.requests[self.input_batch.req_ids[0]]
-            params = request.sampling_params
-            assert params is not None
             # CPU bookkeeping has already appended this step's sampled tokens.
-            at_output_limit = (
-                params.max_tokens is not None and len(request.output_token_ids) >= params.max_tokens
-            )
+            at_output_limit = []
+            for request_id in self.input_batch.req_ids:
+                request = self.requests[request_id]
+                params = request.sampling_params
+                assert params is not None
+                at_output_limit.append(
+                    params.max_tokens is not None
+                    and len(request.output_token_ids) >= params.max_tokens
+                )
             return cast("SpyreDFlashProposer", self.drafter).propose_spyre(
                 sampled_token_ids,
                 aux_hidden_states,
@@ -775,6 +784,7 @@ class TorchSpyreModelRunner(GPUModelRunner):
                 spec_decode_metadata,
                 common_attn_metadata,
                 skip_proposal=at_output_limit,
+                max_model_len=self.effective_drafter_max_model_len,
             )
         return super().propose_draft_token_ids(
             scheduler_output,

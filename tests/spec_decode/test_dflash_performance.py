@@ -9,7 +9,8 @@ import torch
 from spyre_inference.models.qwen3_dflash import (
     SpyreDFlashQwen3ForCausalLM,
     SpyreDFlashQwen3Model,
-    _select_with_feedback,
+    _assemble_feedback,
+    _select_candidate_parts,
 )
 from spyre_inference.v1.spec_decode.dflash import SpyreDFlashProposer
 from spyre_inference.v1.spec_decode.xpress_head import XPressRefinerHead
@@ -30,9 +31,10 @@ from spyre_inference.v1.worker.spyre_model_runner import TorchSpyreModelRunner
 def test_output_limit_uses_tokens_already_appended_by_bookkeeping(output_count, max_tokens, skip):
     calls = []
 
-    def propose(*args, skip_proposal=False):
+    def propose(*args, skip_proposal=False, max_model_len=None):
         calls.append(skip_proposal)
-        return [[]] if skip_proposal else [[7]]
+        assert max_model_len == 512
+        return [[]] if skip_proposal[0] else [[7]]
 
     runner = SimpleNamespace(
         speculative_config=SimpleNamespace(use_dflash=lambda: True),
@@ -45,6 +47,7 @@ def test_output_limit_uses_tokens_already_appended_by_bookkeeping(output_count, 
         input_batch=SimpleNamespace(req_ids=["request"]),
         drafter=SimpleNamespace(propose_spyre=propose),
         _get_positions=lambda count: torch.arange(count),
+        effective_drafter_max_model_len=512,
     )
     result = TorchSpyreModelRunner.propose_draft_token_ids(
         runner,
@@ -58,7 +61,7 @@ def test_output_limit_uses_tokens_already_appended_by_bookkeeping(output_count, 
         None,
         None,
     )
-    assert calls == [skip]
+    assert calls == [[skip]]
     assert result == ([[]] if skip else [[7]])
 
 
@@ -75,6 +78,8 @@ def test_skipped_final_proposal_commits_only_accepted_context():
         context_seconds=0.0,
         proposal_calls=0,
         proposal_seconds=0.0,
+        draft_block_size=16,
+        max_model_len=512,
     )
     result = SpyreDFlashProposer.propose_spyre(
         drafter,
@@ -82,7 +87,9 @@ def test_skipped_final_proposal_commits_only_accepted_context():
         [features],
         torch.arange(10, 14),
         SimpleNamespace(num_draft_tokens=[3]),
-        SimpleNamespace(slot_mapping=torch.arange(128, 132)),
+        SimpleNamespace(
+            slot_mapping=torch.arange(128, 132), query_start_loc_cpu=torch.tensor([0, 4])
+        ),
         skip_proposal=True,
     )
     assert result == [[]]
@@ -131,35 +138,41 @@ def test_context_projection_packs_live_transposed_weights_without_query_columns(
 
 
 @pytest.mark.parametrize("kind", ["random", "all_equal", "negative", "edge_ties"])
-def test_device_feedback_selection_keeps_ties_large_ids_and_anchors(kind):
+@pytest.mark.parametrize("batch", [1, 2, 4])
+def test_device_feedback_selection_keeps_ties_large_ids_and_anchors(kind, batch):
     torch.manual_seed(39)
-    scores = torch.randn(1, 15, 512).half()
+    scores = torch.randn(batch, 15, 512).half()
     if kind == "all_equal":
         scores.zero_()
     elif kind == "negative":
-        scores = -torch.arange(512).view(1, 1, -1).expand(1, 15, -1).half()
+        scores = -torch.arange(512).view(1, 1, -1).expand(batch, 15, -1).half()
     elif kind == "edge_ties":
         scores.fill_(-4)
         for row in range(15):
             index = (31, 32, 63, 64, 255, 256, 510, 511)[row % 8]
-            scores[0, row, index] = scores[0, row, 511] = 9
+            scores[:, row, index] = scores[:, row, 511] = 9
     candidates = torch.randint(0, 262144, scores.shape)
     candidates[..., :8] = torch.tensor([0, 2049, 4097, 65537, 131073, 151935, 262143, 32769])
-    parts = torch.stack((candidates % 512, candidates // 512)).half()
-    previous = torch.full((16, 32), 151935, dtype=torch.int32)
-    draft, feedback = _select_with_feedback(scores, parts, torch.arange(512).half(), previous)
+    parts = tuple(part.half() for part in (candidates % 512, candidates // 512))
+    previous = (torch.arange(batch, dtype=torch.int32) * 30000 + 101).view(batch, 1, 1)
+    previous = previous.expand(batch, 16, 32).reshape(-1, 32).contiguous()
+    low, high = _select_candidate_parts(scores, parts, torch.arange(512).half())
+    draft, feedback = _assemble_feedback(low, high, previous)
     expected = candidates.gather(-1, scores.argmax(-1, keepdim=True)).squeeze(-1)
     assert draft.tolist() == expected.tolist()
-    expected_previous = torch.cat((previous[:2, 0], expected[0, :-1])).int()
-    torch.testing.assert_close(feedback, expected_previous[:, None].expand(16, 32))
+    expected_previous = torch.cat(
+        (previous.view(batch, 16, 32)[:, :2, 0], expected[:, :-1]), dim=1
+    ).int()
+    torch.testing.assert_close(feedback, expected_previous.reshape(-1, 1).expand(-1, 32))
 
 
 @pytest.mark.parametrize("passes", [1, 6])
-def test_device_feedback_serving_loop_copies_only_base_scores_and_final_ids(passes):
+@pytest.mark.parametrize("batch", [1, 2, 4])
+def test_device_feedback_serving_loop_copies_only_base_scores_and_final_ids(passes, batch):
     torch.manual_seed(81)
     head = XPressRefinerHead(1031, 128, 16, rank=64, mlp_hidden=128, topc=512).eval()
-    hidden, base = torch.randn(16, 128), torch.randn(16, 1031)
-    anchor = torch.tensor([1025])
+    hidden, base = torch.randn(batch * 16, 128), torch.randn(batch * 16, 1031)
+    anchor = torch.arange(batch) + 1025
     model = SimpleNamespace(
         xpress_head=head,
         xpress_num_passes=passes,
@@ -171,7 +184,8 @@ def test_device_feedback_serving_loop_copies_only_base_scores_and_final_ids(pass
         _refine=head.refine_full,
         _gather_readout=head.gather_readout,
         _refine_candidates=head.refine_candidates,
-        _select_with_feedback=_select_with_feedback,
+        _select_candidate_parts=_select_candidate_parts,
+        _assemble_feedback=_assemble_feedback,
     )
     for name in (
         "device_to_host_seconds",
@@ -189,13 +203,15 @@ def test_device_feedback_serving_loop_copies_only_base_scores_and_final_ids(pass
         "proposal_id_transfer_bytes",
     ):
         setattr(model, name, 0)
-    for name in ("_copy_logits_to_cpu", "_argmax_on_cpu"):
+    for name in ("_copy_logits_to_cpu", "_argmax_on_cpu", "_select_with_feedback"):
         setattr(model, name, MethodType(getattr(SpyreDFlashQwen3ForCausalLM, name), model))
     with torch.inference_mode():
-        expected = head(base[None], hidden[None], anchor, anchor, passes).tolist()
+        expected = head(
+            base.view(batch, 16, 1031), hidden.view(batch, 16, 128), anchor, anchor, passes
+        ).tolist()
         actual = SpyreDFlashQwen3ForCausalLM.propose_block(model, hidden, anchor)
     assert actual == expected
     assert model.selection_calls == 1
     assert model.device_selection_calls == passes
     assert model.logits_transfer_bytes == base.numel() * 4
-    assert model.proposal_id_transfer_bytes == 15 * 4
+    assert model.proposal_id_transfer_bytes == batch * 15 * 4

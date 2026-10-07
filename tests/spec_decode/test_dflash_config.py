@@ -107,7 +107,9 @@ def config():
     )
 
 
-def test_published_contract_is_accepted(config):
+@pytest.mark.parametrize("batch", [1, 2, 3, 4])
+def test_published_contract_is_accepted(config, batch):
+    config.scheduler_config.max_num_seqs = batch
     validate_dflash_config(config)
     assert config.speculative_config.disable_padded_drafter_batch
     assert config.speculative_config.draft_model_config.hf_config.xpress_topc == 512
@@ -173,7 +175,7 @@ def test_incompatible_checkpoint_or_serving_configuration_fails_early(config, in
     elif invalid == "prefix_cache":
         config.cache_config.enable_prefix_caching = True
     elif invalid == "batch":
-        config.scheduler_config.max_num_seqs = 2
+        config.scheduler_config.max_num_seqs = 5
     elif invalid == "bf16":
         config.model_config.dtype = torch.bfloat16
     elif invalid == "draft_bf16":
@@ -183,4 +185,12 @@ def test_incompatible_checkpoint_or_serving_configuration_fails_early(config, in
     elif invalid == "eager":
         config.model_config.enforce_eager = True
     with pytest.raises(ValueError):
+        validate_dflash_config(config)
+
+
+@pytest.mark.parametrize("batch,budget", [(1, 15), (2, 31), (3, 48), (4, 63)])
+def test_draft_batch_requires_enough_token_capacity(config, batch, budget):
+    config.scheduler_config.max_num_seqs = batch
+    config.scheduler_config.max_num_batched_tokens = budget
+    with pytest.raises(ValueError, match="padded draft batch"):
         validate_dflash_config(config)
