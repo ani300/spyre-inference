@@ -114,11 +114,22 @@ def page_bucket_ladder(max_pages, page_buckets=None):
     Geometric because the recorded set is the product of the query and page axes,
     so a dense ladder makes warmup unaffordable at a long context. A caller-supplied
     ladder trades that warmup cost for less page padding per step.
+
+    Accepts the raw env string or an already-resolved ladder: the backend resolves
+    once and threads the list down, while warmup and the per-step path both re-enter
+    here, so both types reach this function.
     """
     default = [1 << power for power in range((max_pages - 1).bit_length() + 1)]
     if not page_buckets:
         return default
-    return resolve_buckets(page_buckets, max_pages, "SPYRE_JAGGED_PAGE_CAPACITY_BUCKETS", lambda: default)
+    if not isinstance(page_buckets, str):
+        kept = [int(b) for b in page_buckets if b <= max_pages]
+        if not kept:
+            return default
+        return kept if kept[-1] >= max_pages else [*kept, max_pages]
+    return resolve_buckets(
+        page_buckets, max_pages, "SPYRE_JAGGED_PAGE_CAPACITY_BUCKETS", lambda: default
+    )
 
 
 def jagged_plan_variants(
@@ -130,12 +141,7 @@ def jagged_plan_variants(
     sliding_window=None,
     page_buckets=None,
 ):
-    """Enumerate the independent group shapes needed by automatic mixed dispatch.
-
-    Per query width, a knapsack over the token budget bounds how many tiles a step can
-    reach, and every (tile capacity, page capacity) pair up to that bound is emitted so
-    the recorder covers any schedulable batch and no step compiles in the serving path.
-    """
+    """Enumerate the independent group shapes needed by automatic mixed dispatch."""
     max_width = min(512, 1 << ((query_capacity - 1).bit_length() - 1))
     costs: dict[int, dict[int, int]] = {}
     for count in range(1, min(max_tokens, max_seq_len) + 1):
@@ -247,11 +253,6 @@ def _build_group_plan(
     page_buckets=None,
     entry_geometry="page_first",
 ):
-    """Build the index tables for one group: split each sequence's queries into
-    ``width``-row tiles and record the page visits, bounds and key offsets each tile
-    needs, padded out to ``tile_capacity`` x ``page_capacity`` so the kernel shape is
-    reused across steps.
-    """
     if width <= 0 or (width != 1 and width % INT32_ELEMS_PER_STICK):
         raise ValueError("query tiles must be one row or contain whole int32 index sticks")
     if query_capacity <= width:
@@ -594,13 +595,7 @@ def build_jagged_plan(
     causal: bool = True,
     sliding_window: int | None = None,
 ) -> JaggedAttentionPlan:
-    """Build flat page visits over packed token rows.
-
-    Every (query tile, page) pair becomes one row of the tables, padded to
-    ``work_capacity`` so the step count is a bucket rather than a batch property;
-    inactive rows and non-final pages are routed to a sink row past
-    ``query_capacity`` so only the last visit of a tile writes its output.
-    """
+    """Build flat page visits over packed token rows."""
     if block_size <= 0 or query_tile_size <= 0:
         raise ValueError("block_size and query_tile_size must be positive")
     if query_tile_size != 1 and query_tile_size % INT32_ELEMS_PER_STICK:

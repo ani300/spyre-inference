@@ -57,7 +57,7 @@ def _summary(samples):
     }
 
 
-def _worker_info(worker):
+def _worker_info(worker, profiling=False):
     import torch
     import torch_spyre
 
@@ -67,8 +67,11 @@ def _worker_info(worker):
     from spyre_inference.v1.worker import spyre_model_runner
 
     dependencies = subprocess.check_output(["ldd", torch_spyre._C.__file__], text=True)
-    if "libaiupti" in dependencies:
+    linked = "libaiupti" in dependencies
+    if linked and not profiling:
         raise RuntimeError("latency requires torch-spyre built without profiler instrumentation")
+    if profiling and not linked:
+        raise RuntimeError("--profile requires torch-spyre built with USE_SPYRE_PROFILER=1")
     runner = worker.model_runner
     caches = runner._spyre_kv_caches
     sources = {}
@@ -204,12 +207,39 @@ def _replay_case(worker, spec):
         metadata_samples, total_samples = [], []
         compile_guard.arm(compile_guard.CompileGuardLevel.ERROR)
         first_logits = None
-        for _ in range(spec["samples"]):
-            logits, metadata_ms, total_ms = step()
-            metadata_samples.append(metadata_ms)
-            total_samples.append(total_ms)
-            if first_logits is None:
-                first_logits = logits.clone()
+        if spec.get("profile"):
+            trace = Path(spec["artifact"]).with_suffix(f".rank{worker.rank}.json")
+            with torch.profiler.profile(
+                activities=[
+                    torch.profiler.ProfilerActivity.CPU,
+                    torch.profiler.ProfilerActivity.PrivateUse1,
+                ],
+                record_shapes=False,
+            ) as prof:
+                for _ in range(spec["samples"]):
+                    logits, metadata_ms, total_ms = step()
+                    metadata_samples.append(metadata_ms)
+                    total_samples.append(total_ms)
+                    if first_logits is None:
+                        first_logits = logits.clone()
+            prof.export_chrome_trace(str(trace))
+            spans = {}
+            for event in prof.events():
+                if not event.name.startswith("spyre_attn::"):
+                    continue
+                entry = spans.setdefault(event.name, {"count": 0, "cpu_us": 0.0, "dev_us": 0.0})
+                entry["count"] += 1
+                entry["cpu_us"] += float(getattr(event, "self_cpu_time_total", 0.0) or 0.0)
+                entry["dev_us"] += float(getattr(event, "self_device_time_total", 0.0) or 0.0)
+            spec["_spans"] = spans
+            spec["_trace"] = str(trace)
+        else:
+            for _ in range(spec["samples"]):
+                logits, metadata_ms, total_ms = step()
+                metadata_samples.append(metadata_ms)
+                total_samples.append(total_ms)
+                if first_logits is None:
+                    first_logits = logits.clone()
         new_graphs = counters["stats"]["unique_graphs"] - before
         if new_graphs:
             raise RuntimeError(f"{new_graphs} graphs compiled inside the measured window")
@@ -239,6 +269,8 @@ def _replay_case(worker, spec):
         "repeat_max_abs_error": repeat_error,
         "greedy_tokens": values.argmax(-1).tolist(),
         "logits_artifact": str(path),
+        "spans": spec.get("_spans"),
+        "trace_artifact": spec.get("_trace"),
     }
 
 
@@ -342,6 +374,11 @@ def main():
     parser.add_argument("--generation-only", action="store_true")
     parser.add_argument("--generation-smoke", action="store_true")
     parser.add_argument("--generation-iters", type=int, default=3)
+    parser.add_argument(
+        "--profile",
+        action="store_true",
+        help="capture a kineto trace per case instead of timing; needs USE_SPYRE_PROFILER=1",
+    )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if args.samples < 1 or args.warmup < 1 or args.generation_iters < 1:
@@ -362,7 +399,7 @@ def main():
     args.output.parent.mkdir(parents=True, exist_ok=True)
     for name, value in {
         "SPYRE_NUM_CPUS": "8",
-        "SPYRE_ATTN_PROFILING": "0",
+        "SPYRE_ATTN_PROFILING": "1" if args.profile else "0",
         "SPYRE_JAGGED_ATTENTION": str(int(args.backend == "jagged")),
         "SPYRE_ATTN_RECORD": str(int(args.record_attention)),
         "SPYRE_COMPILE_GUARD": "error" if args.record_attention else "off",
@@ -410,7 +447,7 @@ def main():
         seed=1234,
     )
     report["initialization_seconds"] = time.monotonic() - start
-    report["workers"] = llm.collective_rpc(_worker_info, timeout=300)
+    report["workers"] = llm.collective_rpc(_worker_info, timeout=300, args=(args.profile,))
     save()
     history_tokens = []
     history_filled = [0] * args.max_num_seqs
@@ -474,6 +511,7 @@ def main():
             "warmup": args.warmup,
             "samples": args.samples,
             "explicit_warmup": not args.record_attention,
+            "profile": args.profile,
             "artifact": str(args.output.with_suffix("")) + f"-{case['scenario']}-{case['context']}",
         }
         if history_tokens:

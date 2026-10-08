@@ -17,7 +17,7 @@
 import contextlib
 import functools
 import time
-from collections import OrderedDict
+from collections import Counter, OrderedDict
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar, NamedTuple
 
@@ -437,7 +437,8 @@ class SpyreAttentionMetadataBuilder(AttentionMetadataBuilder[SpyreAttentionMetad
             QUERY_TILE_SIZE + 1, vllm_config.scheduler_config.max_num_batched_tokens + 1
         )
         self._jagged_workspace = JaggedPlanWorkspace()
-        self._jagged_plan_logged = False
+        self._jagged_plan_logged_at = 0.0
+        self._jagged_plan_seen: Counter[tuple[int, tuple[int, ...]]] = Counter()
         self._jagged_device_workspace = _JaggedDeviceWorkspace()
         self._jagged_parallel_entries = envs.SPYRE_JAGGED_PARALLEL_ENTRIES
         self._jagged_max_num_seqs = vllm_config.scheduler_config.max_num_seqs
@@ -851,31 +852,34 @@ class SpyreAttentionMetadataBuilder(AttentionMetadataBuilder[SpyreAttentionMetad
 
         if envs.SPYRE_JAGGED_ATTENTION and not self._is_pooling:
             max_entries = self.jagged_parallel_entries()
-            plan = build_jagged_mixed_plan(
-                query_start_loc[: num_seqs + 1],
-                seq_lens[:num_seqs],
-                block_table,
-                self.block_size,
-                query_capacity=self._jagged_query_capacity,
-                causal=causal,
-                sliding_window=self.sliding_window,
-                max_parallel_entries=max_entries,
-                workspace=self._jagged_workspace,
-                page_buckets=self._jagged_page_buckets,
-                group_bucketing=envs.SPYRE_JAGGED_CONTEXT_GROUPS,
-                max_groups=envs.SPYRE_JAGGED_MAX_CONTEXT_GROUPS,
-                entry_geometry=envs.SPYRE_JAGGED_ENTRY_GEOMETRY,
-            )
-            if not self._jagged_plan_logged:
-                # Logged once: without it a run cannot be shown to have used the
-                # configuration it was given, and a silent no-op looks like a result.
-                self._jagged_plan_logged = True
+            with _record_block("spyre_attn::jagged_build_plan"):
+                plan = build_jagged_mixed_plan(
+                    query_start_loc[: num_seqs + 1],
+                    seq_lens[:num_seqs],
+                    block_table,
+                    self.block_size,
+                    query_capacity=self._jagged_query_capacity,
+                    causal=causal,
+                    sliding_window=self.sliding_window,
+                    max_parallel_entries=max_entries,
+                    workspace=self._jagged_workspace,
+                    page_buckets=self._jagged_page_buckets,
+                    group_bucketing=envs.SPYRE_JAGGED_CONTEXT_GROUPS,
+                    max_groups=envs.SPYRE_JAGGED_MAX_CONTEXT_GROUPS,
+                    entry_geometry=envs.SPYRE_JAGGED_ENTRY_GEOMETRY,
+                )
+            # Aggregated, not one-shot: the first call is the client's single-prompt
+            # probe, whose shape says nothing about steady state.
+            caps = tuple(int(g.page_indices.shape[-2]) for g in plan.groups)
+            self._jagged_plan_seen[(len(plan.groups), caps)] += 1
+            now = time.monotonic()
+            if now - self._jagged_plan_logged_at > 60.0:
+                self._jagged_plan_logged_at = now
                 logger.info(
-                    "Jagged mixed plan: %d group(s), page capacities %s, "
+                    "Jagged plan shapes so far (groups, page capacities) -> steps: %s; "
                     "context_groups=%s max_context_groups=%d entry_geometry=%s "
                     "page_capacity_buckets=%s",
-                    len(plan.groups),
-                    [int(g.page_indices.shape[-2]) for g in plan.groups],
+                    dict(sorted(self._jagged_plan_seen.items())),
                     envs.SPYRE_JAGGED_CONTEXT_GROUPS,
                     envs.SPYRE_JAGGED_MAX_CONTEXT_GROUPS,
                     envs.SPYRE_JAGGED_ENTRY_GEOMETRY,
@@ -1551,40 +1555,44 @@ class SpyreAttentionImpl(AttentionImpl[SpyreAttentionMetadata]):
         if query is not q_staging:
             if query.shape[0] > self.staging_rows:
                 raise ValueError("packed query exceeds the configured token capacity")
-            q_staging[: query.shape[0]].copy_(query)
+            with _record_block("spyre_attn::jagged_staging_copy"):
+                q_staging[: query.shape[0]].copy_(query)
         if metadata.jagged_tables_device is None:
-            workspace = metadata.jagged_device_workspace or _JaggedDeviceWorkspace()
-            groups = plan.groups if isinstance(plan, JaggedMixedPlan) else (plan,)
-            metadata.jagged_tables_device = tuple(
-                tensor
-                for group in groups
-                for tensor in workspace.mirror(group.tensors, k_pages.device)
-            )
+            with _record_block("spyre_attn::jagged_mirror_tables"):
+                workspace = metadata.jagged_device_workspace or _JaggedDeviceWorkspace()
+                groups = plan.groups if isinstance(plan, JaggedMixedPlan) else (plan,)
+                metadata.jagged_tables_device = tuple(
+                    tensor
+                    for group in groups
+                    for tensor in workspace.mirror(group.tensors, k_pages.device)
+                )
         if self._jagged_direct_output and isinstance(plan, (JaggedMixedPlan, JaggedTilePlan)):
             groups = plan.groups if isinstance(plan, JaggedMixedPlan) else (plan,)
-            for index, group in enumerate(groups):
-                kernel = (
-                    _jagged_decode_compiled
-                    if group.page_indices.ndim == 4
-                    else _jagged_tile_compiled
-                )
-                q_ids, out_ids, page_ids, q_bounds, k_offsets = metadata.jagged_tables_device[
-                    index * 5 : (index + 1) * 5
-                ]
-                kernel(
-                    q_staging,
-                    k_pages,
-                    v_pages,
-                    q_ids,
-                    out_ids,
-                    page_ids,
-                    q_bounds,
-                    k_offsets,
-                    self.scale,
-                    head_major=self._jagged_head_major,
-                    logits_soft_cap=self.logits_soft_cap,
-                    out=out_staging,
-                )
+            with _record_block("spyre_attn::jagged_dispatch_loop"):
+                for index, group in enumerate(groups):
+                    kernel = (
+                        _jagged_decode_compiled
+                        if group.page_indices.ndim == 4
+                        else _jagged_tile_compiled
+                    )
+                    q_ids, out_ids, page_ids, q_bounds, k_offsets = metadata.jagged_tables_device[
+                        index * 5 : (index + 1) * 5
+                    ]
+                    with _record_block("spyre_attn::jagged_kernel_call"):
+                        kernel(
+                            q_staging,
+                            k_pages,
+                            v_pages,
+                            q_ids,
+                            out_ids,
+                            page_ids,
+                            q_bounds,
+                            k_offsets,
+                            self.scale,
+                            head_major=self._jagged_head_major,
+                            logits_soft_cap=self.logits_soft_cap,
+                            out=out_staging,
+                        )
             if output is not out_staging:
                 rows = min(output.shape[0], self.staging_rows)
                 output[:rows].copy_(out_staging[:rows])

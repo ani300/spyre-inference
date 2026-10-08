@@ -93,6 +93,46 @@ both serving kernels with the compile guard. `SPYRE_ATTN_RECORD=0` permits lazy
 compilation or explicit shape warmup. Attention still compiles when the rest of
 the model runs eagerly.
 
+## Performance status and when to enable it
+
+Jagged attention is off by default because it is **not** currently a net win on
+most end-to-end serving benchmarks, even though its kernels are faster.
+
+Profiled against the default backend through the real worker path, the jagged
+attention span is roughly twice as fast on both decode-heavy and ragged batches.
+Attention is only a small single-digit-to-low-double-digit share of a decoder
+step, though, so halving it leaves a correspondingly small ceiling on any
+whole-step gain — and at the low concurrency the platform currently schedules,
+the surrounding per-step work absorbs it. Measured end-to-end on an agentic
+trace, enabling jagged attention is a slight latency and throughput loss.
+
+`SPYRE_JAGGED_PAGE_CAPACITY_BUCKETS` supplies a denser page-capacity ladder.
+Despite being a clear kernel-level win where page padding is large, it is a
+measured end-to-end **regression** on a clustered workload, by more than the
+whole available attention gain. Treat it as an experiment, not a tuning knob,
+and only with the step-shape log showing that its extra rungs are reachable:
+capacities above `max_model_len / block_size` are dropped at startup as
+unreachable, so a ladder quoted for a long context may be mostly inert at a
+shorter one.
+
+`SPYRE_JAGGED_CONTEXT_GROUPS` keys decode groups by context as well as query
+width. It costs one extra dispatch per occupied bucket, which at low
+`max_num_seqs` outweighs the padding it removes; its measured win comes from
+deliberately wide context spreads.
+
+### Warmup cost
+
+Enabling jagged attention raises startup substantially — several times the
+default backend's warmup — because each attention group variant is traced during
+warmup rather than compiled lazily in the serving path. A denser page-capacity
+ladder multiplies the variant count and raises it by roughly half again on top.
+Nearly all of it is the first layer's compile; the rest resolve from cache.
+
+Budget for this in any serving deployment: a health-check or readiness timeout
+sized for the default backend will expire during jagged warmup. The cost is
+one-time per process, and `SPYRE_ATTN_RECORD=0` trades it back for lazy
+compilation in the serving path.
+
 ## Validation and remaining limits
 
 Tests cover both cache layouts, GQA/MQA/MHA, partial pages, NaN tails, sliding
@@ -112,6 +152,19 @@ surrounding model and restored KV history, attention swaps produced smaller logi
 differences. The exact original failing compilations were not replayed. Compare
 each path independently to a reference, and control compiled model math and
 history when attributing differences to attention.
+
+A later cross-backend check through the real worker, with model-prefilled KV
+history held identical, found the default backend **bitwise reproducible across
+separate processes**, so on that configuration a cross-backend logit difference
+is attributable to the backend rather than to compiler nondeterminism. Jagged
+attention, the dense ladder and context groups each perturbed logits at the same
+order as each other without changing a single greedy token, and short greedy
+generation was token-identical to the default backend. Attention padding and
+masking, not accumulated rounding, is the likely source: the per-request
+difference was *largest on the shortest* sequence in a batch, which is the
+inverse of what accumulation drift would produce. This is a smoke test over a
+few shapes, not a proof of equivalence, and it does not supersede the strict
+elementwise failures above.
 
 ## Benchmark alternatives
 
