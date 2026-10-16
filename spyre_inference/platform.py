@@ -47,9 +47,10 @@ else:
 
 logger = init_logger(__name__)
 
-# Dtypes torch-spyre can run. float16 is the default and the validated one; bfloat16 is
-# accepted only when asked for explicitly. Both are 2 bytes wide, so every
-# stick-alignment constant in this plugin holds for either.
+# Dtypes torch-spyre can run. float16 is the validated one; bfloat16 passes this check, but
+# apply_config_platform_defaults overwrites every model's dtype with float16, an explicit
+# --dtype bfloat16 included, so only a config edited after construction reaches it. Both are
+# 2 bytes wide, so every stick-alignment constant in this plugin holds for either.
 _SUPPORTED_DTYPES = frozenset({torch.float16, torch.bfloat16})
 
 
@@ -338,8 +339,8 @@ class TorchSpyrePlatform(CpuPlatform):
                 )
 
         # In check_and_update_config we assert the dtype is one Spyre supports.
-        # This must be set here as the default, otherwise all usage (including test fixtures) would
-        # require setting the dtype.
+        # Set here so no usage (test fixtures included) has to pass a dtype. Unconditional: it
+        # replaces whatever the user asked for, bfloat16 included.
         vllm_config.model_config.dtype = torch.float16
 
     @classmethod
@@ -465,14 +466,14 @@ class TorchSpyrePlatform(CpuPlatform):
         the KV cache allocated at the native ``get_head_size()``, which the device copy
         requires to be stick-aligned.
 
-        Two independent restickify failures share this hook, at different widths:
-        RoPE models pad to the next 128-multiple (the failure is RoPE-induced, so
-        non-RoPE decoders like OPT/GPT-2 lower fine at head=64 and are skipped).
-        Pooling/encoder-only models (BERT/RoBERTa) have no RoPE, so theirs is the
-        plain sub-stick failure (e.g. head_size=32 sharing a stick between two
-        heads) -- the next 64-multiple is enough, applied via the construction
-        patch in ``spyre_inference.custom_ops.bert_head_pad`` (the generic
-        property-shim doesn't work on BertSelfAttention's own assert).
+        RoPE and pooling models pad to the next 64-multiple: a sub-stick head (e.g.
+        head_size=32 sharing a stick between two heads) cannot lower, while
+        SpyreRotaryEmbedding handles a sub-stick half (head_size=64). The Transformers
+        backend's RoPE views a head as two halves, so there RoPE models pad to the next
+        128-multiple. Non-RoPE generative decoders (OPT/GPT-2) are skipped; pooling
+        models also go through the construction patch in
+        ``spyre_inference.custom_ops.bert_head_pad`` (the generic property-shim doesn't
+        work on BertSelfAttention's own assert).
 
         No-op for models whose head_dim is already a multiple of the applicable size.
         """
@@ -480,7 +481,8 @@ class TorchSpyrePlatform(CpuPlatform):
 
         model_config = vllm_config.model_config
         hf_config = model_config.hf_config
-        target_cfg = getattr(hf_config, "text_config", None) or hf_config
+        # The config the runner's padding passes read, so both agree on the text part.
+        target_cfg = model_config.hf_text_config
         num_heads = getattr(target_cfg, "num_attention_heads", None)
         hidden_size = getattr(target_cfg, "hidden_size", None)
         if num_heads is None or hidden_size is None:
@@ -498,7 +500,7 @@ class TorchSpyrePlatform(CpuPlatform):
         )
         has_rope = any(getattr(c, "rope_parameters", None) for c in cfgs)
         if has_rope:
-            multiple = 128
+            multiple = 128 if model_config.using_transformers_backend() else 64
         elif cls._is_pooling_model(vllm_config):
             multiple = 64
         else:
@@ -725,6 +727,56 @@ class TorchSpyrePlatform(CpuPlatform):
         from spyre_inference.threading_config import configure_threading
 
         configure_threading(parallel_config.world_size)
+
+        # Pin the V1 model runner: TorchSpyreWorker builds the V1 GPUModelRunner subclass
+        # directly, so V2 is not merely slower here, it does not run.
+        #
+        # Load-bearing twice over. VllmConfig.use_v2_model_runner returns an explicitly
+        # set VLLM_USE_V2_MODEL_RUNNER *before* it reaches the HAS_TRITON fallback, and
+        # HAS_TRITON is not reliably False here: a cpu-target vLLM build (>= 0.31) pulls
+        # in triton-cpu, which makes V2 the default.
+        if os.environ.get("VLLM_USE_V2_MODEL_RUNNER") not in (None, "", "0"):
+            logger.warning(
+                "Spyre only supports the V1 model runner; overriding "
+                "VLLM_USE_V2_MODEL_RUNNER=%s to 0.",
+                os.environ["VLLM_USE_V2_MODEL_RUNNER"],
+            )
+        os.environ["VLLM_USE_V2_MODEL_RUNNER"] = "0"
+
+        # Two features outrank that env var inside use_v2_model_runner, so rejecting them
+        # here is what actually keeps the pin true. Left alone, hisparse raises
+        # "HiSparse requires Model Runner V2; remove VLLM_USE_V2_MODEL_RUNNER=0" --
+        # blaming an env var the user never set, since we just set it -- and watermarking
+        # silently returns V2 anyway, landing on the missing Triton much later.
+        if getattr(vllm_config.attention_config, "hisparse_config", None) is not None:
+            raise ValueError(
+                "Spyre does not support HiSparse: it requires the V2 model runner, and "
+                "TorchSpyreWorker only builds the V1 runner."
+            )
+        if getattr(vllm_config, "watermark_config", None) is not None:
+            raise ValueError(
+                "Spyre does not support watermarking: it requires the V2 model runner, "
+                "and TorchSpyreWorker only builds the V1 runner."
+            )
+        # 0.31 leaves AuxOutput validation to out-of-tree platforms; in-tree it is only
+        # wired to the V2 runner, so on ours it would be accepted and never produced.
+        aux_output_config = getattr(vllm_config, "aux_output_config", None)
+        if aux_output_config is not None and aux_output_config.enabled:
+            raise ValueError(
+                "Spyre does not support AuxOutput (e.g. returning routed experts): it "
+                "requires the V2 model runner, and TorchSpyreWorker only builds the V1 "
+                "runner."
+            )
+
+        # The pin holds only if the resolved property agrees; anything new that outranks
+        # the env var must fail here rather than at the first V2-only code path. A raise,
+        # not an assert: -O would strip the tripwire and restore the deferred failure.
+        if vllm_config.use_v2_model_runner is not False:
+            raise RuntimeError(
+                "VLLM_USE_V2_MODEL_RUNNER=0 did not take effect: use_v2_model_runner is "
+                "True. A config field now forces the V2 model runner, which Spyre cannot "
+                "use; reject it in TorchSpyrePlatform.check_and_update_config."
+            )
 
         # ---- worker ----
         if parallel_config.worker_cls == "auto":

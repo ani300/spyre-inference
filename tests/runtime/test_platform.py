@@ -320,7 +320,7 @@ def _fake_pad_config(
 
 
 def test_pad_head_dim_full_rotary_pads():
-    """Full neox rotary (rotary_dim == head_dim): head_dim 64 -> 128 as normal.
+    """Full neox rotary (rotary_dim == head_dim): head_dim 96 -> 128, the next 64-multiple.
 
     transformers 5.x carries all RoPE config in ``rope_parameters``; absence of a
     partial-rotary factor there means full rotary.
@@ -328,7 +328,36 @@ def test_pad_head_dim_full_rotary_pads():
     from spyre_inference.platform import TorchSpyrePlatform
 
     vllm_config, hf, mc = _fake_pad_config(
+        head_dim=96, rope_parameters={"rope_type": "default", "rope_theta": 10000.0}
+    )
+    TorchSpyrePlatform._maybe_pad_head_dim(vllm_config)
+
+    assert hf.head_dim == 128
+    assert hf._spyre_orig_head_dim == 96
+    assert mc.model_arch_config.head_size == 128
+
+
+def test_pad_head_dim_native_rope_keeps_head_64():
+    """A native RoPE model at head_dim 64 needs no padding."""
+    from spyre_inference.platform import TorchSpyrePlatform
+
+    vllm_config, hf, mc = _fake_pad_config(
         rope_parameters={"rope_type": "default", "rope_theta": 10000.0}
+    )
+    TorchSpyrePlatform._maybe_pad_head_dim(vllm_config)
+
+    assert hf.head_dim == 64
+    assert not hasattr(hf, "_spyre_orig_head_dim")
+    assert mc.model_arch_config.head_size == 64
+
+
+def test_pad_head_dim_transformers_backend_rope_pads_head_64():
+    """The Transformers backend's RoPE splits heads in half, so head_dim 64 -> 128."""
+    from spyre_inference.platform import TorchSpyrePlatform
+
+    vllm_config, hf, mc = _fake_pad_config(
+        transformers_backend=True,
+        rope_parameters={"rope_type": "default", "rope_theta": 10000.0},
     )
     TorchSpyrePlatform._maybe_pad_head_dim(vllm_config)
 
@@ -359,15 +388,16 @@ def test_pad_head_dim_rejects_rope_dim():
     from spyre_inference.platform import TorchSpyrePlatform
 
     vllm_config, hf, mc = _fake_pad_config(
+        head_dim=96,
         rope_parameters={"rope_type": "default", "rope_theta": 10000.0, "rope_dim": 64},
     )
     with pytest.raises(NotImplementedError, match="rope_dim"):
         TorchSpyrePlatform._maybe_pad_head_dim(vllm_config)
 
     # Bail out before mutating anything.
-    assert hf.head_dim == 64
+    assert hf.head_dim == 96
     assert not hasattr(hf, "_spyre_orig_head_dim")
-    assert mc.model_arch_config.head_size == 64
+    assert mc.model_arch_config.head_size == 96
 
 
 def test_pad_head_dim_rejects_partial_rotary_factor():
@@ -375,6 +405,7 @@ def test_pad_head_dim_rejects_partial_rotary_factor():
     from spyre_inference.platform import TorchSpyrePlatform
 
     vllm_config, hf, _ = _fake_pad_config(
+        head_dim=96,
         rope_parameters={
             "rope_type": "default",
             "rope_theta": 10000.0,
@@ -383,7 +414,7 @@ def test_pad_head_dim_rejects_partial_rotary_factor():
     )
     with pytest.raises(NotImplementedError, match="partial_rotary_factor"):
         TorchSpyrePlatform._maybe_pad_head_dim(vllm_config)
-    assert hf.head_dim == 64
+    assert hf.head_dim == 96
 
 
 def test_reduced_rotary_dim_reason_branches():
@@ -450,6 +481,20 @@ def test_pad_head_dim_skips_an_already_aligned_pooling_model():
 
     assert hf.head_dim == 64
     assert not hasattr(hf, "_spyre_orig_head_dim")
+
+
+def test_pad_head_dim_pads_hf_text_config_under_any_sub_config_name():
+    """The platform pads the config the runner passes read: ``hf_text_config``, which
+    ``get_text_config()`` may resolve from e.g. ``llm_config``, not only ``text_config``."""
+    from spyre_inference.platform import TorchSpyrePlatform
+
+    vllm_config, text, mc = _fake_pad_config(head_dim=96, rope_parameters={"rope_type": "default"})
+    mc.hf_config = SimpleNamespace(llm_config=text)
+
+    TorchSpyrePlatform._maybe_pad_head_dim(vllm_config)
+
+    assert text.head_dim == 128
+    assert text._spyre_orig_head_dim == 96
 
 
 def _defaults_config(enforce_eager: bool, mode) -> VllmConfig:
@@ -525,6 +570,48 @@ def test_only_tensor_parallelism_is_accepted(field):
 
     vllm_config = _defaults_config(enforce_eager=True, mode=None)
     setattr(vllm_config.parallel_config, field, 2)
+
+    with pytest.raises(ValueError, match="Spyre does not support"):
+        TorchSpyrePlatform.check_and_update_config(vllm_config)
+
+
+@pytest.mark.parametrize("requested", ["1", "true", "0", None])
+def test_v1_model_runner_is_pinned(monkeypatch, requested):
+    """TorchSpyreWorker only builds the V1 runner, so the resolved config must agree
+    whatever the user asked for. An explicit VLLM_USE_V2_MODEL_RUNNER=1 short-circuits
+    upstream's HAS_TRITON fallback, so the override is what prevents V2 here."""
+    from spyre_inference.platform import TorchSpyrePlatform
+
+    if requested is None:
+        monkeypatch.delenv("VLLM_USE_V2_MODEL_RUNNER", raising=False)
+    else:
+        monkeypatch.setenv("VLLM_USE_V2_MODEL_RUNNER", requested)
+
+    vllm_config = _defaults_config(enforce_eager=True, mode=None)
+    TorchSpyrePlatform.check_and_update_config(vllm_config)
+
+    assert os.environ["VLLM_USE_V2_MODEL_RUNNER"] == "0"
+    assert vllm_config.use_v2_model_runner is False
+
+
+@pytest.mark.parametrize("feature", ["hisparse", "watermark", "aux_output"])
+def test_v2_only_features_are_rejected(monkeypatch, feature):
+    """hisparse and watermarking outrank VLLM_USE_V2_MODEL_RUNNER inside
+    use_v2_model_runner: hisparse raises an error blaming the env var *we* set, and
+    watermarking silently returns V2. AuxOutput never flips the runner, so the tripwire
+    cannot catch it, and it would be accepted and never produced. Reject all three here."""
+    from spyre_inference.platform import TorchSpyrePlatform
+
+    monkeypatch.delenv("VLLM_USE_V2_MODEL_RUNNER", raising=False)
+    vllm_config = _defaults_config(enforce_eager=True, mode=None)
+    if feature == "hisparse":
+        monkeypatch.setattr(
+            vllm_config.attention_config, "hisparse_config", object(), raising=False
+        )
+    elif feature == "watermark":
+        monkeypatch.setattr(vllm_config, "watermark_config", object(), raising=False)
+    else:
+        monkeypatch.setattr(vllm_config.aux_output_config, "enable_return_routed_experts", True)
 
     with pytest.raises(ValueError, match="Spyre does not support"):
         TorchSpyrePlatform.check_and_update_config(vllm_config)

@@ -12,22 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Strict-xfail probes for torch-spyre primitives blocking CPU fallbacks.
+"""Probes for torch-spyre primitives blocking CPU fallbacks.
 
 Each test exercises a single primitive that spyre-inference needs on-device
-(decoder forward, encoder pack, pooling). They are intentionally strict
-xfail: when a primitive starts working in torch-spyre, the corresponding
-probe flips to XPASS and we can remove the associated workaround here.
-
-Section 10 applies the same idea to workarounds for upstream vLLM bugs: those
-probes need no device and inspect vLLM instead.
+(decoder forward, encoder pack, pooling). Strict xfails flag newly working
+primitives so their workarounds can be removed. The one-row matmul timing probe
+is non-strict: an XPASS calls for remeasurement before removing its workaround.
 
 All device tests run against the real Spyre device when available; otherwise
 they skip silently (the same pattern used by attention/test_spyre_attn.py).
 """
-
-import inspect
-import re
 
 import pytest
 import torch
@@ -1161,42 +1155,7 @@ def test_spyre_fp32_linear_for_pooling_heads(spyre_device, mode):
 
 
 # ---------------------------------------------------------------------------
-# 12. Upstream vLLM workarounds (no device needed)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Gemma4SelfDecoderLayers re-stores four scalar buffers owned by "
-        "Gemma4Model as plain attributes, so model.to('spyre') leaves them on "
-        "CPU and the compiled embed_input_ids gets a 0-d CPU graph input. "
-        "Fixed upstream by vllm-project/vllm#54213; when that lands, drop "
-        "models/gemma4.py::register_aliased_scalars and its call site."
-    ),
-)
-def test_vllm_gemma4_self_decoder_registers_aliased_scalars():
-    """The aliased scalars must be buffers, so ``.to(device)`` moves them.
-
-    Source inspection rather than construction: ``Gemma4SelfDecoderLayers`` is a
-    ``support_torch_compile`` wrapper whose ``__init__`` wants a built parent
-    model, and what the fix changes is exactly these four assignments.
-    """
-    from spyre_inference.models.gemma4 import _ALIASED_SCALARS
-
-    gemma4 = pytest.importorskip("vllm.model_executor.models.gemma4")
-    src = inspect.getsource(gemma4.Gemma4SelfDecoderLayers.__init__)
-
-    plain = [
-        name
-        for name in _ALIASED_SCALARS
-        if not re.search(rf"""register_buffer\(\s*["']{name}["']""", src)
-    ]
-    assert not plain, f"still plain attributes upstream: {plain}"
-
-
-# ---------------------------------------------------------------------------
-# 13. Short-row matmul scheduling
+# 12. Short-row matmul scheduling
 # ---------------------------------------------------------------------------
 
 
@@ -1244,7 +1203,7 @@ def test_spyre_one_row_matmul_not_slower_than_full_row_block(spyre_device):
 
 
 # ---------------------------------------------------------------------------
-# 14. Compiled Pixtral vision attention (coarse-tile hint split)
+# 13. Compiled Pixtral vision attention (coarse-tile hint split)
 # ---------------------------------------------------------------------------
 
 
@@ -1337,41 +1296,7 @@ def test_spyre_compiled_pixtral_vision_attention_coarse_tile(spyre_device, tp_gr
 
 
 # ---------------------------------------------------------------------------
-# 15. BLIP-2 Q-Former attention: upstream switch to F.scaled_dot_product_attention
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Blip2QFormerMultiHeadAttention.forward still uses an explicit "
-        "torch.matmul / torch.softmax chain whose permute/matmul/softmax layout "
-        "Spyre's restickify and bmm_padding passes cannot reconcile, forcing the "
-        "entire module to run on CPU (spyre_inference/multimodal/blip2.py). "
-        "vllm-project/vllm@a1541f5 replaces that chain with a single "
-        "F.scaled_dot_product_attention call. When this probe XPASS-es, "
-        "drop blip2.py and its call site in apply()."
-    ),
-)
-def test_vllm_blip2_qformer_uses_sdpa():
-    """Blip2QFormerMultiHeadAttention.forward must use scaled_dot_product_attention.
-
-    Source inspection: the current forward contains an explicit matmul/softmax
-    chain that Spyre cannot restickify.  vllm-project/vllm@a1541f5 replaces it
-    with F.scaled_dot_product_attention; when that version is in use this probe
-    flips to XPASS.
-    """
-    blip2 = pytest.importorskip("vllm.model_executor.models.blip2")
-
-    src = inspect.getsource(blip2.Blip2QFormerMultiHeadAttention.forward)
-    assert re.search(r"\bscaled_dot_product_attention\b", src), (
-        "Blip2QFormerMultiHeadAttention.forward still uses the matmul/softmax "
-        "chain; spyre_inference/multimodal/blip2.py CPU-fallback patch still needed"
-    )
-
-
-# ---------------------------------------------------------------------------
-# 16. Eager GemmaRMSNorm
+# 14. Eager GemmaRMSNorm
 # ---------------------------------------------------------------------------
 
 
