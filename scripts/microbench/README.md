@@ -15,7 +15,7 @@ Q staging, KV insertion and the surrounding model. Use an idle card and a
 profiler-free torch-spyre build; the harness rejects extensions linked to libaiupti.
 
 ```bash
-SPYRE_DEVICES=0 SPYRE_NUM_CPUS=8 DXP_LOOP_UNROLL=0 \
+SPYRE_DEVICES=0 SPYRE_NUM_CPUS=8 SPYRE_BACKEND_LOOP_UNROLL=0 \
 uv run --no-sync python scripts/microbench/jagged_attn_latency.py \
     --contexts 1024 2048 4096 8192 16384 32768 --warmup 3 --samples 15 \
     --output microbench_results/jagged-attention.json
@@ -64,7 +64,7 @@ The harness runs offline using your Hugging Face cache. Set `HF_HOME` if your
 cached weights are outside the default location.
 
 ```bash
-SPYRE_DEVICES=0 SPYRE_NUM_CPUS=8 DXP_LOOP_UNROLL=0 \
+SPYRE_DEVICES=0 SPYRE_NUM_CPUS=8 SPYRE_BACKEND_LOOP_UNROLL=0 \
 uv run --no-sync python scripts/microbench/jagged_model_step_latency.py \
     --model ibm-ai-platform/micro-g3.3-8b-instruct-1b --backend baseline \
     --prefill-history --contexts 1024 32768 --warmup 3 --samples 15 \

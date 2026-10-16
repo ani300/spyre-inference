@@ -98,7 +98,7 @@ def _worker_info(worker, profiling=False):
                 "SPYRE_ATTN_RECORD",
                 "SPYRE_COMPILE_GRANULARITY",
                 "SPYRE_COMPILE_GUARD",
-                "DXP_LOOP_UNROLL",
+                "SPYRE_BACKEND_LOOP_UNROLL",
                 "SPYRE_KERNEL_CACHE",
                 "TORCHINDUCTOR_CACHE_DIR",
             )
@@ -411,7 +411,7 @@ def main():
         os.environ[name] = value
     os.environ.setdefault("VLLM_PLUGINS", "spyre_inference")
     os.environ.setdefault("SPYRE_JAGGED_PARALLEL_ENTRIES", "64")
-    os.environ.setdefault("DXP_LOOP_UNROLL", "0")
+    os.environ.setdefault("SPYRE_BACKEND_LOOP_UNROLL", "0")
 
     # Worker rank environment must be established before loading torch-spyre/comms.
     from vllm import LLM, SamplingParams

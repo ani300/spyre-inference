@@ -228,7 +228,7 @@ def main():
     os.environ["SPYRE_NUM_CPUS"] = "8"
     os.environ["SPYRE_ATTN_PROFILING"] = "0"
     os.environ.setdefault("VLLM_PLUGINS", "spyre_inference")
-    os.environ.setdefault("DXP_LOOP_UNROLL", "0")
+    os.environ.setdefault("SPYRE_BACKEND_LOOP_UNROLL", "0")
     for name in (
         "OMP_NUM_THREADS",
         "OPENBLAS_NUM_THREADS",

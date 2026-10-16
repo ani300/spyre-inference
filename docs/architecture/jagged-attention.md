@@ -2,11 +2,12 @@
 
 `SPYRE_JAGGED_ATTENTION=1` enables experimental decoder attention over packed
 queries and paged KV. It is off by default. The target is 128K tokens per sequence
-with 128-token pages. Set `DXP_LOOP_UNROLL=0` to preserve counted device loops.
+with 128-token pages. Set `SPYRE_BACKEND_LOOP_UNROLL=0` to preserve counted device loops.
 
-The [companion torch-spyre changes](https://github.com/torch-spyre/torch-spyre/pull/5086)
-provide scatter/carry lowering, consecutive host correction steps, loop-unroll
-control, and one-sided clamps that preserve DL16's range. ALiBi is unsupported.
+The [companion torch-spyre PR](https://github.com/torch-spyre/torch-spyre/pull/5157)
+provides the remaining scatter/carry lowering. Its branch includes the merged
+pytree output support, consecutive host correction steps, loop-unroll control,
+and one-sided clamps that preserve DL16's range. ALiBi is unsupported.
 Pooling and encoder attention use their existing paths.
 
 ## vLLM contract
