@@ -218,8 +218,10 @@ class TorchSpyrePlatform(CpuPlatform):
         @functools.wraps(create_model_config)
         def _spyre_create_model_config(self):
             from spyre_inference.models import apply_prelaunch_overrides
+            from spyre_inference.v1.spec_decode.config import normalize_speculative_config
 
             apply_prelaunch_overrides(self)
+            normalize_speculative_config(self)
             return create_model_config(self)
 
         EngineArgs.create_model_config = _spyre_create_model_config  # ty: ignore[invalid-assignment]
@@ -754,6 +756,12 @@ class TorchSpyrePlatform(CpuPlatform):
         runner = envs.environment_variables["SPYRE_MODEL_RUNNER"]()
         if runner not in ("v1", "v2"):
             raise ValueError(f"SPYRE_MODEL_RUNNER={runner!r} is not v1 or v2.")
+        if (
+            runner == "v2"
+            and vllm_config.speculative_config is not None
+            and vllm_config.speculative_config.use_dflash()
+        ):
+            raise ValueError("Spyre DFlash/XPress currently requires SPYRE_MODEL_RUNNER=v1")
         gate = "open" if runner == "v2" else "closed"
         if triton_gate.state() != gate:
             raise ValueError(
