@@ -57,8 +57,24 @@ checkpoint selects the pass count, with six as the default.
 
 The pinned vLLM 0.32 lacks native XPress registration, so this adapter uses its V1
 DFlash classes with a configuration bridge. The merged GPU speculator uses V2.
-Initial selection and per-pass argmax run on CPU; readout and refinement run on
-Spyre. Jagged attention and compiler extensions are optional follow-up work.
+By default, initial selection and per-pass argmax run on CPU; readout and
+refinement run on Spyre. Jagged attention remains an optional follow-up.
+
+## Optional device selection
+
+`SPYRE_XPRESS_DEVICE_FEEDBACK=1` keeps per-pass selection and proposal feedback
+on Spyre. `SPYRE_XPRESS_DEVICE_SELECTION=1` also selects the initial shortlist
+on Spyre and implies device feedback. Both default to zero.
+
+These options require a compatible compiler stack: the current dependency pin
+rejects the feedback layout join, and resident shortlist selection needs the
+FP16 payload top-k extensions. They are qualification paths, not a supported
+serving configuration on the current pin.
+
+C128 uses one top-128 round and does not require masking. C512 uses four rounds
+and needs position-aware masking between them. Token IDs use two base-512 FP16
+digits regardless of shortlist size. Compact candidate IDs still pass through
+the host before the readout gather; fully resident ID conversion remains open.
 
 ## Validation
 
