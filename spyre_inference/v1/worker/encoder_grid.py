@@ -30,6 +30,8 @@ from spyre_inference.v1.worker.spyre_shape_bucketer import (
 )
 
 if TYPE_CHECKING:
+    from vllm.config import ModelConfig
+
     # Not imported at runtime: the V1 runner imports spyre_encoder_attn lazily.
     from spyre_inference.v1.attention.backends.spyre_encoder_attn import (
         EncoderGroupPlan,
@@ -37,6 +39,12 @@ if TYPE_CHECKING:
     )
 
 logger = init_logger(__name__)
+
+
+def encoder_pad_token_id(model_config: ModelConfig) -> int:
+    """Pad id for batch-pad filler tokens; their outputs are masked and dropped."""
+    pad = getattr(getattr(model_config, "hf_config", None), "pad_token_id", None)
+    return int(pad) if isinstance(pad, int) else 0
 
 
 def expand_body_to_grid(
@@ -102,9 +110,10 @@ class EncoderDispatchStats:
     """Path counts and body occupancy of the encoder steps, logged periodically.
 
     The counters live in the worker process, so a log line is the only way they reach
-    whoever is running a benchmark. Occupancy is the number worth watching: the body is
-    one fixed shape, so a step that is narrow or short pays for rows it does not use,
-    and that is the cost the rectangular path trades away per-layer data movement for.
+    whoever is running a benchmark. Occupancy is the number worth watching: each step
+    pads to one body, so a step that is narrow or short pays for rows of that body it
+    does not use. That is the cost the rectangular path trades away per-layer data
+    movement for.
     """
 
     rect_steps: int = 0

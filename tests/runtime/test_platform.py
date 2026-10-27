@@ -265,6 +265,19 @@ def test_apply_config_floors_the_pooling_budget_at_max_model_len():
     assert vllm_config.compilation_config.compile_sizes == [512]
 
 
+def test_apply_config_keeps_a_fast_body_when_the_model_is_longer_than_2k():
+    """bge-reranker-v2-m3 at 8K. The scheduler can still accept one 8K sequence,
+    but compile sizes include the 2K and 4K bodies so shorter steps do not pad to 8K."""
+    from spyre_inference.platform import TorchSpyrePlatform
+
+    vllm_config = _pooling_platform_config(
+        max_model_len=8192, max_num_seqs=4, max_num_batched_tokens=8192
+    )
+    TorchSpyrePlatform.apply_config_platform_defaults(vllm_config)
+    assert vllm_config.compilation_config.compile_sizes == [2048, 4096, 8192]
+    assert vllm_config.scheduler_config.max_num_batched_tokens == 8192
+
+
 def test_apply_config_caps_the_pooling_budget_at_the_measured_argmax():
     from spyre_inference.platform import TorchSpyrePlatform
 
@@ -833,6 +846,20 @@ def test_configure_threading_warn_only_leaves_envs_untouched(monkeypatch):
     configure_threading(worker_count=1)
 
     assert os.environ["OMP_NUM_THREADS"] == "128"
+
+
+def test_configure_threading_sets_passive_wait_policy(monkeypatch):
+    """Enabled → idle OpenMP workers sleep instead of spinning on the CPU quota."""
+    from spyre_inference.threading_config import configure_threading
+
+    monkeypatch.setenv("SPYRE_UPDATE_THREAD_CONFIG", "1")
+    monkeypatch.setenv("OMP_WAIT_POLICY", "")  # recorded, so undo removes what the code sets
+    monkeypatch.delenv("OMP_WAIT_POLICY")
+    _force_cpu_count(monkeypatch, 8.0)
+
+    configure_threading(worker_count=4)
+
+    assert os.environ["OMP_WAIT_POLICY"] == "PASSIVE"
 
 
 def test_configure_threading_raises_when_undetectable(monkeypatch):
