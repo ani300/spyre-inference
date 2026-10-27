@@ -33,17 +33,6 @@ class XPressRefinerHead(nn.Module):
         "mlp.down_proj.weight": "mlp_down.weight",
         "w2.weight": "w2.weight",
     }
-    _TRAINING_KEYS = {
-        "token_embed.weight": "w1.weight",
-        "down_h.weight": "down_h.weight",
-        "down_g.weight": "down_g.weight",
-        "in_proj.weight": "in_proj.weight",
-        "mix_l": "mix_L",
-        "mlp_gate.weight": "mlp_gate.weight",
-        "mlp_up.weight": "mlp_up.weight",
-        "mlp_down.weight": "mlp_down.weight",
-        "readout.weight": "w2.weight",
-    }
 
     def __init__(
         self,
@@ -103,15 +92,7 @@ class XPressRefinerHead(nn.Module):
 
     def load_checkpoint_weights(self, weights: Mapping[str, torch.Tensor]) -> None:
         """Load raw checkpoint weights; use load_state_dict for an already folded mixer."""
-        published = any(name.startswith("xpress_head.") for name in weights)
-        training = any(name.startswith("refiner_head.") for name in weights)
-        if published == training:
-            raise ValueError("Expected exactly one XPress checkpoint head representation")
-        prefix, mapping = (
-            ("xpress_head.", self._PUBLISHED_KEYS)
-            if published
-            else ("refiner_head.", self._TRAINING_KEYS)
-        )
+        prefix, mapping = "xpress_head.", self._PUBLISHED_KEYS
         names = {name[len(prefix) :] for name in weights if name.startswith(prefix)}
         if names != mapping.keys():
             raise ValueError(
