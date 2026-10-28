@@ -16,6 +16,7 @@ from types import MethodType, SimpleNamespace
 
 import pytest
 import torch
+from xpress_reference import merged_refine
 
 from spyre_inference.models.qwen3_dflash import SpyreDFlashQwen3ForCausalLM
 from spyre_inference.v1.spec_decode.xpress_head import XPressRefinerHead
@@ -60,10 +61,10 @@ def test_serving_selection_loop_matches_reference_and_transfers_only_candidate_s
         setattr(model, name, MethodType(getattr(SpyreDFlashQwen3ForCausalLM, name), model))
     with torch.inference_mode():
         expected = [
-            head(
+            merged_refine(
+                head,
                 base.view(batch, 16, vocab)[i : i + 1],
                 hidden.view(batch, 16, 128)[i : i + 1],
-                anchor[i : i + 1],
                 anchor[i : i + 1],
                 passes,
             )[0].tolist()

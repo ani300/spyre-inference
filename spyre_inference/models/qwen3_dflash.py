@@ -15,6 +15,12 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 # SPDX-License-Identifier: Apache-2.0
 
+# TEMPORARY XPress bridge for vllm-project/vllm#54448 (ce9467b757).
+# vLLM 0.32 provides DFlash but lacks Qwen3XPressForCausalLM. When
+# test_xpress_vendored.py fails, subclass upstream XPress and retain Spyre
+# context-KV, layout and compiled refinement overrides.
+# Cleanup: https://github.com/torch-spyre/spyre-inference/issues/1417
+
 """DFlash context projection and XPress refinement for the Spyre V1 runner."""
 
 import time

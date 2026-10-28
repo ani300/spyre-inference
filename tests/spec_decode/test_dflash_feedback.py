@@ -16,6 +16,7 @@ from types import MethodType, SimpleNamespace
 
 import pytest
 import torch
+from xpress_reference import merged_refine
 
 from spyre_inference import envs
 from spyre_inference.models.qwen3_dflash import (
@@ -177,8 +178,8 @@ def test_device_feedback_serving_loop_copies_only_base_scores_and_final_ids(pass
     for name in ("_copy_logits_to_cpu", "_argmax_on_cpu", "_select_with_feedback"):
         setattr(model, name, MethodType(getattr(SpyreDFlashQwen3ForCausalLM, name), model))
     with torch.inference_mode():
-        expected = head(
-            base.view(batch, 16, 1031), hidden.view(batch, 16, 128), anchor, anchor, passes
+        expected = merged_refine(
+            head, base.view(batch, 16, 1031), hidden.view(batch, 16, 128), anchor, passes
         ).tolist()
         actual = SpyreDFlashQwen3ForCausalLM.propose_block(model, hidden, anchor)
     assert actual == expected
