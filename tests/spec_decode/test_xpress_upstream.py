@@ -15,35 +15,13 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 # SPDX-License-Identifier: Apache-2.0
 
-"""Independent concatenated-projection oracle for merged vLLM XPress at ce9467b757c0."""
+"""Compare Spyre refinement helpers with the independent merged-vLLM reference."""
 
 import pytest
 import torch
-from torch.nn import functional as F
+from xpress_reference import merged_refine
 
 from spyre_inference.v1.spec_decode.xpress_head import XPressRefinerHead
-
-
-def merged_refine(head, base, hidden, anchors, passes):
-    summary = hidden.mean(dim=1, keepdim=True).expand_as(hidden)
-    cache = torch.cat((head.down_h(hidden), head.down_g(summary)), dim=-1)
-    draft = base[:, 1:].argmax(-1)
-    candidates = None
-    if head.topc:
-        _, candidates = base[:, 1:].topk(min(head.topc, base.shape[-1]), dim=-1)
-    for _ in range(passes):
-        # XPressSpeculator uses the verified anchor as its own predecessor.
-        previous = torch.cat((anchors[:, None], anchors[:, None], draft[:, :-1]), dim=1)
-        x = head.in_proj(torch.cat((cache, head.w1(previous)), dim=-1))
-        x = torch.bmm(head.mix_L.to(x.dtype), x.permute(2, 1, 0)).permute(2, 1, 0)
-        latent = x + head.mlp_down(F.silu(head.mlp_gate(x)) * head.mlp_up(x))
-        scores = base[:, 1:] + head.w2(latent)[:, 1:]
-        if candidates is None:
-            draft = scores.argmax(-1)
-        else:
-            winners = scores.gather(-1, candidates).argmax(-1, keepdim=True)
-            draft = candidates.gather(-1, winners).squeeze(-1)
-    return draft
 
 
 @pytest.mark.parametrize("batch", [1, 4])
@@ -58,5 +36,18 @@ def test_refinement_matches_merged_vllm(batch, topc, passes):
         base = torch.randn(batch, 16, 1031, dtype=torch.float64)
         anchors = torch.arange(batch) + 1025
         expected = merged_refine(head, base, hidden, anchors, passes)
-        actual = head(base, hidden, anchors, anchors, passes)
+        scores = base[:, 1:]
+        actual = scores.argmax(-1)
+        cache = head.project_hidden_cache(hidden)
+        candidates = readout = None
+        if topc:
+            scores, candidates = scores.topk(topc, dim=-1)
+            readout = head.gather_readout(candidates.flatten())
+        for _ in range(passes):
+            previous = torch.cat((anchors[:, None], anchors[:, None], actual[:, :-1]), dim=1)
+            if candidates is None:
+                actual = head.refine_full(scores, previous, cache).argmax(-1)
+            else:
+                logits = head.refine_candidates(scores, previous, cache, readout)
+                actual = candidates.gather(-1, logits.argmax(-1, keepdim=True)).squeeze(-1)
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
