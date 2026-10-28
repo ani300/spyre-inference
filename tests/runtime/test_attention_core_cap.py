@@ -23,7 +23,7 @@ from torch.utils._config_module import install_config_module
 
 from spyre_inference import envs
 from spyre_inference.moe import _token_cores
-from spyre_inference.v1.attention.backends.spyre_head_major_attn import _capped_cores
+from spyre_inference.v1.attention.backends.spyre_head_major_attn import _run_with_capped_cores
 
 
 @pytest.fixture(params=[None, 16], ids=["default", "overridden"])
@@ -54,8 +54,10 @@ def test_attention_core_cap_preserves_a_compiled_moe_config_read(core_config):
     torch.testing.assert_close(model(x), expected)
     assert counter.frame_count == 1
 
-    with _capped_cores(1):
-        assert core_config.sencores == 8
+    def attention(y):
+        return y + core_config.sencores
+
+    torch.testing.assert_close(_run_with_capped_cores(1, attention, x), x + 8)
 
     torch.testing.assert_close(model(x), expected)
     assert counter.frame_count == 1
@@ -67,13 +69,30 @@ def test_attention_core_cap_preserves_a_compiled_moe_config_read(core_config):
 
 def test_attention_core_cap_restores_nested_scopes_after_an_exception(core_config, monkeypatch):
     original = core_config.sencores
-    with pytest.raises(ValueError, match="inner scope"), _capped_cores(1):
+
+    def inner():
+        assert core_config.sencores == 4
+        raise ValueError("inner scope")
+
+    def outer():
         assert core_config.sencores == 8
         monkeypatch.setattr(envs, "SPYRE_ATTN_MAX_CORES", 4)
         try:
-            with _capped_cores(1):
-                assert core_config.sencores == 4
-                raise ValueError("inner scope")
+            _run_with_capped_cores(1, inner)
         finally:
             assert core_config.sencores == 8
+
+    with pytest.raises(ValueError, match="inner scope"):
+        _run_with_capped_cores(1, outer)
     assert core_config.sencores == original
+
+
+def test_attention_core_cap_leaves_uncapped_calls_unchanged(core_config, monkeypatch):
+    monkeypatch.setattr(envs, "SPYRE_ATTN_MAX_CORES", 0)
+
+    def attention(x):
+        return x + core_config.sencores
+
+    x = torch.zeros(64)
+    expected = x + core_config.sencores
+    torch.testing.assert_close(_run_with_capped_cores(32, attention, x), expected)
