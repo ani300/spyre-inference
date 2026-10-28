@@ -1337,6 +1337,12 @@ class SpyreAttentionImpl(AttentionImpl[SpyreAttentionMetadata]):
         fp8_requested = kv_cache_dtype in FP8_KV_CACHE_DTYPES
         self.kv_cache_fp8 = fp8_requested and self.keeps_kv_cache
         if self.kv_cache_fp8:
+            # The jagged kernels take only the softmax scale, so a float8 page would be
+            # read as model dtype; `_read_scales` folding happens on the paged path only.
+            if self._jagged_enabled:
+                raise NotImplementedError(
+                    f"SPYRE_JAGGED_ATTENTION does not yet support kv_cache_dtype={kv_cache_dtype}"
+                )
             if not self.supports_fp8_kv_cache:
                 raise ValueError(
                     f"kv_cache_dtype={kv_cache_dtype} is not supported by "
