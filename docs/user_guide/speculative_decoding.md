@@ -6,7 +6,7 @@ the published `UIUC-SSAIL/Qwen3-8B-XPress-b16` checkpoint directly with
 `Qwen/Qwen3-8B`; checkpoint conversion is not required.
 
 Supported configuration: compiled FP16, unquantized weights, TP=1, PP=1,
-the V1 runner, one active request, greedy target sampling, and prefix caching
+the V1 runner, up to four active requests, greedy target sampling, and prefix caching
 disabled. The checkpoint fixes the block at one anchor plus 15 proposals.
 
 ## Run Qwen3-8B
@@ -27,6 +27,20 @@ uv run --no-sync vllm serve Qwen/Qwen3-8B \
 Use `temperature=0` in requests. The same speculative configuration works with
 `vllm.LLM`. A full verification round needs at least 31 budgeted tokens because
 vLLM reserves additional drafting slots; the adapter rejects a smaller budget.
+
+For four concurrent requests, set `--max-num-seqs 4`,
+`--max-num-batched-tokens 128`, and
+`--compilation-config '{"compile_sizes": [1, 16, 32, 64, 128]}'`.
+Set `SPYRE_ATTN_QUERY_BUCKETS=1,16,64,128` for this token budget.
+The draft body uses batches of 1, 2, or 4; three active requests pad to four.
+Each request retains its own accepted context, page table, and output limit.
+
+| Maximum requests | Minimum token budget |
+| --- | --- |
+| 1 | 31 |
+| 2 | 62 |
+| 3 | 93 |
+| 4 | 124 |
 
 ## Refinement and compatibility
 
@@ -51,10 +65,11 @@ Spyre. Jagged attention and compiler extensions are optional follow-up work.
 ```bash
 uv run --no-sync pytest tests/spec_decode -m 'not upstream'
 SPYRE_XPRESS_TEST_TOPC=128 uv run --no-sync pytest \
-  tests/e2e/test_speculative_decoding.py -m model_quality -s
+  tests/e2e/test_speculative_decoding.py tests/e2e/test_xpress_batch.py -m model_quality -s
 ```
 
 CPU recurrence and lifecycle tests pass. Device qualification remains open:
 the strict target-token comparison exposes a shape-dependent target score tie
-between ordinary decoding and block verification. The equality assertion remains
-in the test. Repeat device validation with C512 when qualifying that configuration.
+between ordinary decoding and block verification. Equality assertions remain in
+the single-request and batched tests. Batch-four and C512 qualification must be
+repeated on the current dependency pins before this integration is ready.
