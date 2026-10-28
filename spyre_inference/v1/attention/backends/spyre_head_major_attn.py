@@ -117,12 +117,12 @@ def _capped_cores(output_units: int):
         return
     from torch_spyre._inductor import config as ts_config
 
-    prev = ts_config.sencores
-    ts_config.sencores = max_cores
+    # Preserve an unset override: Dynamo 2.14 guards ConfigModule's lookup path.
+    revert = ts_config._make_closure_patcher(sencores=max_cores)()
     try:
         yield
     finally:
-        ts_config.sencores = prev
+        revert()
 
 
 class SpyreHeadMajorAttentionBackend(SpyreAttentionBackend):
