@@ -1,0 +1,140 @@
+"""Granite-shaped FP8 QK probe, including the production cache allocation/store.
+
+Synthetic inputs: 32 query heads, 8 KV heads, D=128, one page per sequence.
+The staged mode is diagnostic: it expands K to DL16 before repacking as FP8.
+"""
+
+import argparse
+import json
+import warnings
+from pathlib import Path
+
+import torch
+import torch_spyre  # noqa: F401
+from torch_spyre.ops.fallbacks import FallbackWarning
+
+from spyre_inference.v1.attention.ops.fp8_qk import fp8_attention, fp8_qk
+from spyre_inference.v1.attention.ops.layout import head_major_kv_layout
+from spyre_inference.v1.attention.ops.reshape_and_cache_head_major import (
+    reshape_and_cache_head_major_kernel,
+)
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--mode", choices=["native", "staged", "weight"], required=True)
+parser.add_argument("--batch", type=int, default=1)
+parser.add_argument("--query-len", type=int, default=128)
+parser.add_argument("--output", required=True)
+args = parser.parse_args()
+warnings.filterwarnings("error", category=FallbackWarning)
+torch.manual_seed(29)
+b, h, g, m, n, d = args.batch, 8, 4, args.query_len, 128, 128
+ks, vs = 0.02, 0.015
+q = torch.randn(b, m, h * g, d, dtype=torch.float16)
+k = torch.randn(b, h, n, d, dtype=torch.float16)
+v = torch.randn_like(k)
+q_fold = q.transpose(1, 2).reshape(b, h, g * m, d)
+mask = torch.zeros(m, n, dtype=torch.float16)
+if m > 1:
+    mask.masked_fill_(torch.arange(n)[None, :] > torch.arange(m)[:, None], -float("inf"))
+mask = mask[None, None, None].expand(b, h, g, m, n).reshape(b, h, g * m, n).contiguous()
+qdev, kdev, vdev, maskdev = (x.to("spyre") for x in (q, k, v, mask))
+
+
+def error(actual, expected):
+    diff = actual - expected
+    return {
+        "finite": bool(actual.isfinite().all()),
+        "max_abs": float(diff.abs().max()),
+        "relative_l2": float(diff.norm() / expected.norm()),
+    }
+
+
+def pack_weight(x):
+    return torch.ops.spyre.qfp8wt((x.transpose(-1, -2) / ks).clamp(-448, 448))
+
+
+k8 = (k.float() / ks).clamp(-448, 448).to(torch.float8_e4m3fn).float()
+v8 = (v.float() / vs).clamp(-448, 448).to(torch.float8_e4m3fn).float()
+result = {"args": vars(args), "query_heads": h * g, "kv_heads": h, "head_size": d}
+if args.mode == "weight":
+    key_t = torch.compile(pack_weight, fullgraph=True)(kdev)
+    value = vdev
+    reference_v = v.float()
+else:
+    layout = head_major_kv_layout(b * h, n, d, torch.float8_e4m3fn)
+    kcache, vcache = (
+        torch.empty(
+            (b, h, n, d),
+            dtype=torch.float8_e4m3fn,
+            device=torch.device("spyre"),
+            device_layout=layout,
+        )
+        for _ in range(2)
+    )
+    # Fill every entry; reverse page assignment to exercise the gather's ordering.
+    page_ids = torch.arange(b - 1, -1, -1, dtype=torch.int64)
+    rows = [
+        (page_ids[:, None] * h * n + i * n + torch.arange(n)[None]).flatten().to("spyre")
+        for i in range(h)
+    ]
+    source_k = k.transpose(1, 2).reshape(b * n, h, d).contiguous().to("spyre")
+    source_v = v.transpose(1, 2).reshape(b * n, h, d).contiguous().to("spyre")
+    torch.compile(reshape_and_cache_head_major_kernel, fullgraph=True)(
+        source_k, source_v, kcache.view(-1, d), vcache.view(-1, d), rows, ks, vs
+    )
+    print("Production cache store finished", kcache.device_tensor_layout(), flush=True)
+    page_ids = page_ids.to("spyre")
+
+    def expand_pages(cache, indices):
+        return cache.index_select(0, indices).to(torch.float16)
+
+    expand = torch.compile(expand_pages, fullgraph=True)
+    k16, v16 = expand(kcache, page_ids), expand(vcache, page_ids)
+    result["stored_k_vs_reference"] = error(k16.cpu().float(), k8)
+    result["stored_v_vs_reference"] = error(v16.cpu().float(), v8)
+    print(json.dumps(result), flush=True)
+    assert result["stored_k_vs_reference"]["relative_l2"] < 0.04
+    assert result["stored_v_vs_reference"]["relative_l2"] < 0.04
+    value = torch.compile(lambda x: x * vs, fullgraph=True)(v16)
+    reference_v = v8 * vs
+    if args.mode == "staged":
+        # Two graph boundaries force expansion before the transpose/repacking.
+        key_t = torch.compile(
+            lambda x: torch.ops.spyre.qfp8wt(x.transpose(-1, -2)), fullgraph=True
+        )(k16)
+    else:
+        key_t = kcache
+
+
+def scores(query, key):
+    query = query.transpose(1, 2).reshape(b, h, g * m, d)
+    if args.mode == "native":
+        key = key.index_select(0, page_ids).transpose(-1, -2)
+    return fp8_qk(query, key, ks, d**-0.5)
+
+
+def attention(query, key, value, mask):
+    query = query.transpose(1, 2).reshape(b, h, g * m, d)
+    if args.mode == "native":
+        key = key.index_select(0, page_ids).transpose(-1, -2)
+    return fp8_attention(query, key, value, mask, ks, d**-0.5)
+
+
+actual_scores = torch.compile(scores, fullgraph=True)(qdev, key_t).cpu().float()
+actual = torch.compile(attention, fullgraph=True)(qdev, key_t, value, maskdev).cpu().float()
+qs = (q_fold.float().abs().amax(-1, keepdim=True) / 448).clamp(min=1.1920928955078125e-7)
+q8 = (q_fold.float() / qs).clamp(-448, 448).to(torch.float8_e4m3fn).float()
+ref_scores = (q8 @ k8.transpose(-1, -2)) * (qs * (ks * d**-0.5))
+ref = torch.softmax(ref_scores + mask.float(), -1) @ reference_v
+unquantized = (
+    torch.softmax((q_fold.float() @ k.float().transpose(-1, -2)) * d**-0.5 + mask.float(), -1)
+    @ v.float()
+)
+result["scores_vs_quantized_reference"] = error(actual_scores, ref_scores)
+result["attention_vs_quantized_reference"] = error(actual, ref)
+result["attention_vs_unquantized_reference"] = error(actual, unquantized)
+Path(args.output).write_text(json.dumps(result, indent=2) + "\n")
+print(json.dumps(result, indent=2), flush=True)
+assert actual_scores.isfinite().all() and actual.isfinite().all()
+assert result["scores_vs_quantized_reference"]["relative_l2"] < 0.04
+assert result["attention_vs_quantized_reference"]["relative_l2"] < 0.06

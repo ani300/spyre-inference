@@ -1,0 +1,70 @@
+{"args": {"path": "packed", "operation": "read", "batch": 1, "query_len": 128, "output": "<results>/packed-read-b1-q128.json"}, "torch": "2.13.0+cpu", "torch_spyre": "0.6.0.dev355+head.gcbc79da3", "status": "running", "stage": "allocate", "allocated_k_layout": "SpyreTensorLayout(device_size=[1, 8, 1, 128, 128], stride_map =[-1, 16384, 128, 128, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8WT, valid_elements={(0,): 1, (1,): 8, (2, 4): 128, (3,): 128})", "allocated_v_layout": "SpyreTensorLayout(device_size=[8, 128, 1, 128], stride_map =[16384, 128, 128, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8CH, valid_elements={})"}
+{"args": {"path": "packed", "operation": "read", "batch": 1, "query_len": 128, "output": "<results>/packed-read-b1-q128.json"}, "torch": "2.13.0+cpu", "torch_spyre": "0.6.0.dev355+head.gcbc79da3", "status": "running", "stage": "packed_attention", "allocated_k_layout": "SpyreTensorLayout(device_size=[1, 8, 1, 128, 128], stride_map =[-1, 16384, 128, 128, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8WT, valid_elements={(0,): 1, (1,): 8, (2, 4): 128, (3,): 128})", "allocated_v_layout": "SpyreTensorLayout(device_size=[8, 128, 1, 128], stride_map =[16384, 128, 128, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8CH, valid_elements={})", "seeded_k_layout": "SpyreTensorLayout(device_size=[1, 8, 1, 128, 128], stride_map =[-1, 16384, 128, 128, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8WT, valid_elements={(0,): 1, (1,): 8, (2, 4): 128, (3,): 128})"}
+{
+  "args": {
+    "path": "packed",
+    "operation": "read",
+    "batch": 1,
+    "query_len": 128,
+    "output": "<results>/packed-read-b1-q128.json"
+  },
+  "torch": "2.13.0+cpu",
+  "torch_spyre": "0.6.0.dev355+head.gcbc79da3",
+  "status": "failed",
+  "stage": "packed_attention",
+  "allocated_k_layout": "SpyreTensorLayout(device_size=[1, 8, 1, 128, 128], stride_map =[-1, 16384, 128, 128, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8WT, valid_elements={(0,): 1, (1,): 8, (2, 4): 128, (3,): 128})",
+  "allocated_v_layout": "SpyreTensorLayout(device_size=[8, 128, 1, 128], stride_map =[16384, 128, 128, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8CH, valid_elements={})",
+  "seeded_k_layout": "SpyreTensorLayout(device_size=[1, 8, 1, 128, 128], stride_map =[-1, 16384, 128, 128, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8WT, valid_elements={(0,): 1, (1,): 8, (2, 4): 128, (3,): 128})",
+  "error_type": "InductorError",
+  "error": "StopIteration: \n\nSet TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS=\"+dynamo\"\n"
+}
+Traceback (most recent call last):
+  File "<spyre-inference>/examples/experimental/fp8_qk_cache.py", line 206, in <module>
+    main()
+  File "<spyre-inference>/examples/experimental/fp8_qk_cache.py", line 196, in main
+    run(args, result)
+  File "<spyre-inference>/examples/experimental/fp8_qk_cache.py", line 150, in run
+    attention(q.to("spyre"), k_pages, v_pages, page_ids, mask.to("spyre"), ks, vs, d**-0.5)
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py", line 1183, in compile_wrapper
+    raise e.remove_dynamo_frames() from None  # see TORCHDYNAMO_VERBOSE=1
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch/_inductor/compile_fx.py", line 1079, in _compile_fx_inner
+    raise InductorError(e, currentframe()).with_traceback(
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch/_inductor/compile_fx.py", line 1059, in _compile_fx_inner
+    mb_compiled_graph = fx_codegen_and_compile(
+                        ^^^^^^^^^^^^^^^^^^^^^^^
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch/_inductor/compile_fx.py", line 1847, in fx_codegen_and_compile
+    return scheme.codegen_and_compile(gm, example_inputs, inputs_to_check, graph_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch/_inductor/compile_fx.py", line 1608, in codegen_and_compile
+    compiled_module = graph.compile_to_module()
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch/_inductor/graph.py", line 2669, in compile_to_module
+    return self._compile_to_module()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch/_inductor/graph.py", line 2675, in _compile_to_module
+    self.codegen_with_cpp_wrapper() if self.cpp_wrapper else self.codegen()
+                                                             ^^^^^^^^^^^^^^
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch/_inductor/graph.py", line 2607, in codegen
+    self._update_scheduler()
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/patches.py", line 228, in _spyre_update_scheduler
+    _pre_scheduling_pass(self)
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/passes.py", line 562, in __call__
+    self._run_pass_loop(graph)
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/passes.py", line 608, in _run_pass_loop
+    pass_fn(graph)
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/passes.py", line 412, in _distribute_work
+    preassigned_ops = cost_model_matmul_division(graph)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/work_division.py", line 2992, in cost_model_matmul_division
+    if _cost_model_divide_op(op, max_cores):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/work_division.py", line 2953, in _cost_model_divide_op
+    splits = _cost_model_matmul_planner(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/work_division.py", line 2646, in _cost_model_matmul_planner
+    fp8_weight_td = next(
+                    ^^^^^
+torch._inductor.exc.InductorError: StopIteration:
+
+Set TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS="+dynamo"

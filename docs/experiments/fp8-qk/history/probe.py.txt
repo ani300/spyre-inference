@@ -1,0 +1,99 @@
+"""Compare packed FP8 QK and full attention with a float32 CPU reference."""
+
+import argparse
+import json
+import time
+import warnings
+from pathlib import Path
+
+import torch
+import torch_spyre
+from torch_spyre.ops.fallbacks import FallbackWarning
+
+from spyre_inference.v1.attention.ops.fp8_qk import fp8_attention, fp8_qk
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--key-layout', choices=['weight', 'cache', 'copy', 'repack'], required=True)
+parser.add_argument('--batch', type=int, default=1)
+parser.add_argument('--query-len', type=int, default=128)
+parser.add_argument('--key-len', type=int, default=128)
+parser.add_argument('--heads', type=int, default=2)
+parser.add_argument('--output', required=True)
+args = parser.parse_args()
+warnings.filterwarnings('error', category=FallbackWarning)
+torch.manual_seed(17)
+b, h, m, n, d = args.batch, args.heads, args.query_len, args.key_len, 128
+q = torch.randn(b, h, m, d, dtype=torch.float16)
+if m > 1:
+    q[..., 0, :] = 0
+    q[..., 1, :] *= 4
+k = torch.randn(b, h, n, d, dtype=torch.float16)
+v = torch.randn(b, h, n, d, dtype=torch.float16)
+ks = 0.02
+attention_scale = d ** -0.5
+mask = torch.zeros(m, n, dtype=torch.float16)
+if m > 1:
+    mask.masked_fill_(torch.arange(n)[None, :] > torch.arange(m)[:, None] + max(n-m, 0), -float('inf'))
+mask = mask.reshape(1, 1, m, n).expand(b, h, m, n).contiguous()
+
+def prepare_key(k):
+    if args.key_layout == 'weight':
+        return torch.ops.spyre.qfp8wt((k.transpose(-1, -2) / ks).clamp(-448.0, 448.0))
+    return torch.ops.spyre.qfp8ch((k / ks).clamp(-448.0, 448.0))
+
+qdev, kdev, vdev, maskdev = (x.to('spyre') for x in (q, k, v, mask))
+start = time.perf_counter()
+packed = torch.compile(prepare_key, fullgraph=True)(kdev)
+key_t = packed if args.key_layout == 'weight' else packed.transpose(-1, -2)
+print('key layout', packed.device_tensor_layout(), flush=True)
+if args.key_layout == 'copy':
+    storage = torch.compile(
+        lambda k: torch.ops.spyre.qfp8wt(k.transpose(-1, -2) * 0.0), fullgraph=True
+    )(kdev)
+
+    def copy_key(src, dst):
+        dst.copy_(src)
+        return dst
+
+    print('destination layout', storage.device_tensor_layout(), flush=True)
+    key_t = torch.compile(copy_key, fullgraph=True)(key_t, storage)
+
+def scores(q, key_t):
+    if args.key_layout == 'repack':
+        key_t = torch.ops.spyre.qfp8wt(key_t.to(torch.float16))
+    return fp8_qk(q, key_t, ks, attention_scale)
+
+compiled_scores = torch.compile(scores, fullgraph=True)
+target_scores = compiled_scores(qdev, key_t).cpu().float()
+
+def attention(q, key_t, v, mask):
+    if args.key_layout == 'repack':
+        key_t = torch.ops.spyre.qfp8wt(key_t.to(torch.float16))
+    return fp8_attention(q, key_t, v, mask, ks, attention_scale)
+
+compiled_attention = torch.compile(attention, fullgraph=True)
+target = compiled_attention(qdev, key_t, vdev, maskdev).cpu().float()
+compile_seconds = time.perf_counter() - start
+
+qs = (q.float().abs().amax(-1, keepdim=True) / 448.0).clamp(min=1.1920928955078125e-7)
+q8 = (q.float() / qs).clamp(-448, 448).to(torch.float8_e4m3fn).float()
+k8 = (k.float() / ks).clamp(-448, 448).to(torch.float8_e4m3fn).float()
+ref_scores = (q8 @ k8.transpose(-1, -2)) * (qs * (ks * attention_scale))
+ref = torch.softmax(ref_scores + mask.float(), dim=-1) @ v.float()
+full_ref = torch.softmax((q.float() @ k.float().transpose(-1, -2)) * attention_scale + mask.float(), dim=-1) @ v.float()
+
+def error(actual, expected):
+    diff = actual - expected
+    return {'finite': bool(actual.isfinite().all()), 'max_abs': float(diff.abs().max()),
+            'rms': float(diff.square().mean().sqrt()),
+            'relative_l2': float(diff.norm() / expected.norm())}
+
+result = {'args': vars(args), 'compile_seconds': compile_seconds,
+          'scores_vs_quantized_reference': error(target_scores, ref_scores),
+          'attention_vs_quantized_reference': error(target, ref),
+          'attention_vs_unquantized_reference': error(target, full_ref)}
+Path(args.output).write_text(json.dumps(result, indent=2) + '\n')
+print(json.dumps(result, indent=2), flush=True)
+assert target.isfinite().all()
+assert result['scores_vs_quantized_reference']['relative_l2'] < 0.04
+assert result['attention_vs_quantized_reference']['relative_l2'] < 0.06

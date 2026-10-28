@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>FP8 cache writes: token rows versus QFP8WT</title>
+<style>
+body{font:17px system-ui,sans-serif;color:#14253c;background:#f7f9fc;margin:32px auto;padding:0 20px;max-width:1500px}
+h1{font-size:clamp(25px,3vw,38px);margin-bottom:12px}p{line-height:1.55}.muted{color:#516278}
+.controls{background:white;border:1px solid #cbd5e1;border-radius:12px;padding:18px;margin:22px 0;display:flex;gap:24px;align-items:center;flex-wrap:wrap}
+input{width:240px;accent-color:#1761cf}.panels{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.panel{background:white;border:1px solid #cbd5e1;border-radius:12px;padding:20px;overflow:auto}
+h2{margin:0 0 8px;font-size:25px}.matrix{margin-top:22px;min-width:560px}
+.stick{display:grid;grid-template-columns:65px repeat(8,1fr);gap:5px;margin:7px 0;align-items:center}
+.cell{background:#edf1f6;padding:9px 3px;border-radius:4px;text-align:center;font:13px ui-monospace,monospace}
+.changed{background:#1761cf;color:white}.stick-name{font:13px ui-monospace,monospace;color:#516278}
+.stat{font-size:23px;color:#1761cf}.detail{background:white;border:1px solid #cbd5e1;border-radius:12px;padding:20px;margin-top:24px}
+code{font-size:15px}a{color:#1761cf}output{font-weight:700;color:#1761cf}
+@media(max-width:1000px){.panels{grid-template-columns:1fr}}
+</style>
+<h1>Why a token write becomes a partial-stick update</h1>
+<p class="muted">Schematic: 8 tokens × 8 features, with 8-byte sticks. Actual Spyre sticks hold 128 bytes.
+The QFP8WT toy uses 2 features × 4 tokens per stick; the real format uses 2 × 64.</p>
+<div class="controls"><label for="token">Write token <output id="chosen">5</output></label>
+<input id="token" type="range" min="0" max="7" value="5" step="1" aria-label="Token slot to update">
+<span>Blue = replace · Gray = preserve</span></div>
+<div class="panels">
+<section class="panel"><h2>Current K cache</h2><div class="muted">Token rows: [token, feature]</div>
+<div class="matrix" id="current"></div><p class="stat">8 bytes changed · 1 stick touched</p></section>
+<section class="panel"><h2>QFP8WT K cache</h2><div class="muted">Packed Kᵀ: 2 features × 4 tokens per stick</div>
+<div class="matrix" id="packed"></div><p class="stat">8 bytes changed · 4 sticks touched</p></section>
+</div>
+<p class="muted">Each row above is one physical stick. <code>t5.d2</code> means token 5, feature 2.
+The QFP8CH within-stick lane order is simplified; all features still belong to the same token.</p>
+<div class="detail"><h2>What the selected index means physically</h2><p id="detail"></p>
+<p>The logical assignment is valid in PyTorch. In the current Spyre cache, the index selects a row outside the stick.
+For QFP8WT it also selects lanes inside each destination stick. A writer must preserve all other lanes.
+The current row-scatter path does not supply that partial-stick update.</p>
+<p>For Granite at D = 128, the corresponding write changes 128 bytes total: one complete stick in the current
+cache, versus two bytes in each of 64 QFP8WT sticks. This counts destinations; it does not claim a measured
+64× memory-traffic penalty or that the hardware can never support partial writes.</p>
+<p>A solution could use a supported masked update, read/merge/write the affected sticks, or buffer complete
+64-token tiles before packing them. The last option needs a separate path for the incomplete tail.</p></div>
+<p><a href="cache-write-layout.png">Download the diagram</a></p>
+<script>
+const layouts={"current": [[[0, 0], [0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6], [0, 7]], [[1, 0], [1, 1], [1, 2], [1, 3], [1, 4], [1, 5], [1, 6], [1, 7]], [[2, 0], [2, 1], [2, 2], [2, 3], [2, 4], [2, 5], [2, 6], [2, 7]], [[3, 0], [3, 1], [3, 2], [3, 3], [3, 4], [3, 5], [3, 6], [3, 7]], [[4, 0], [4, 1], [4, 2], [4, 3], [4, 4], [4, 5], [4, 6], [4, 7]], [[5, 0], [5, 1], [5, 2], [5, 3], [5, 4], [5, 5], [5, 6], [5, 7]], [[6, 0], [6, 1], [6, 2], [6, 3], [6, 4], [6, 5], [6, 6], [6, 7]], [[7, 0], [7, 1], [7, 2], [7, 3], [7, 4], [7, 5], [7, 6], [7, 7]]], "packed": [[[0, 0], [0, 1], [1, 0], [1, 1], [2, 0], [2, 1], [3, 0], [3, 1]], [[0, 2], [0, 3], [1, 2], [1, 3], [2, 2], [2, 3], [3, 2], [3, 3]], [[0, 4], [0, 5], [1, 4], [1, 5], [2, 4], [2, 5], [3, 4], [3, 5]], [[0, 6], [0, 7], [1, 6], [1, 7], [2, 6], [2, 7], [3, 6], [3, 7]], [[4, 0], [4, 1], [5, 0], [5, 1], [6, 0], [6, 1], [7, 0], [7, 1]], [[4, 2], [4, 3], [5, 2], [5, 3], [6, 2], [6, 3], [7, 2], [7, 3]], [[4, 4], [4, 5], [5, 4], [5, 5], [6, 4], [6, 5], [7, 4], [7, 5]], [[4, 6], [4, 7], [5, 6], [5, 7], [6, 6], [6, 7], [7, 6], [7, 7]]]};
+function render(){
+ const t=Number(document.getElementById('token').value);document.getElementById('chosen').value=t;
+ for(const [name,rows] of Object.entries(layouts)){
+  const target=document.getElementById(name);target.replaceChildren();
+  rows.forEach((row,s)=>{
+   const line=document.createElement('div');line.className='stick';
+   const label=document.createElement('span');label.className='stick-name';label.textContent='stick '+s;line.append(label);
+   row.forEach(([token,feature])=>{
+    const cell=document.createElement('span');cell.className='cell'+(token===t?' changed':'');
+    cell.textContent='t'+token+'.d'+feature;cell.title='Token '+token+', feature '+feature+(token===t?': replace':': preserve');line.append(cell);
+   });target.append(line);
+  });
+ }
+ const block=Math.floor(t/4),lane=t%4;
+ document.getElementById('detail').textContent='Token '+t+' selects current-cache stick '+t+'. In QFP8WT it selects token block '+block+', byte lanes '+(2*lane)+' and '+(2*lane+1)+' in sticks '+(block*4)+'–'+(block*4+3)+'. Moving from token 3 to 4 changes the token block; within a block, the index moves between byte lanes.';
+}
+document.getElementById('token').addEventListener('input',render);render();
+</script></html>

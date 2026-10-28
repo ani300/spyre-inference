@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "<spyre-inference>/.claude/skills/debug-spyre/logs/debug-20261028-184921-fp8-qk-cache-layout/cache_gqa_probe.py", line 65, in <module>
+    kcache, vcache = (
+    ^^^^^^^^^^^^^^
+  File "<spyre-inference>/.claude/skills/debug-spyre/logs/debug-20261028-184921-fp8-qk-cache-layout/cache_gqa_probe.py", line 66, in <genexpr>
+    torch.empty((b, h, n, d), dtype=torch.float8_e4m3fn, device="spyre", device_layout=layout)
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch_spyre/_monkey_patch.py", line 305, in spyre_empty
+    return empty_with_layout(
+           ^^^^^^^^^^^^^^^^^^
+TypeError: empty_with_layout(): incompatible function arguments. The following argument types are supported:
+    1. (arg0: Tuple[int, ...], arg1: torch_spyre._C.SpyreTensorLayout, arg2: torch.dtype | None, arg3: torch.device | None, arg4: bool | None, arg5: torch.memory_format | None) -> torch.Tensor
+
+Invoked with: (1, 8, 128, 128), SpyreTensorLayout(device_size=[8, 128, 1, 128], stride_map =[16384, 128, 128, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8CH, valid_elements={}), torch.float8_e4m3fn, 'spyre', False, torch.contiguous_format

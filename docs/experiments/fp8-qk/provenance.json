@@ -1,0 +1,14 @@
+{
+  "repositories": {
+    "spyre-inference-fp8-qk": "89c4e2598411cd93bbb1f98cd54d1260634d64d6",
+    "torch-spyre-fp8-qk": "cbc79da3ab992fad10c80ef61ce6dae904882288"
+  },
+  "lower_stack_sha256": {
+    "sentient/runtime/lib/libflex.so": "abbfcb3d4a887e639d8b3606a585565d34202d898016714d62c3197d8b5917cb",
+    "sentient/deeptools/bin/dbo-opt": "1a3021a8198be471ab44bbd2a10e834a55f7c0051c2f52fe72cbfe74eafd39d2",
+    "sentient/libaiupti/lib/libaiupti.so": "395cb0b1f133a2b87856f416232a4d7b64ca9d2d3dee10d40c4cfc0db00b7d95",
+    "sentient/spyre_comms/lib/libspyre_comms.so.1": "533058b0ab2049f11fe11188b95e0ccf9e11ee8f30316f623e20cb3b5ce3769e"
+  },
+  "torch": "2.13.0+cpu",
+  "torch_spyre": "0.6.0.dev355+head.gcbc79da3"
+}

@@ -1,0 +1,73 @@
+{
+  "status": "blocked",
+  "summary": "The requested arithmetic prototype is validated. All eight packed-K controls pass (B1/B4 prefill/decode, two-head and Granite 32Q/8KV GQA). Native integration remains blocked: current QFP8CH KV-cache packing cannot directly feed QFP8WT FP8 matmul. Production cache writes and DL16 reads pass at B1/B4. Separate DL16 expansion and QFP8WT repacking allow FP8 QK at both B1/B4, but retain expansion cost and add repacking. No end-to-end model or speedup claim.",
+  "cluster": [
+    "probe cache B1 prefill (baseline)",
+    "probe cache B4 prefill",
+    "probe cache B1 decode",
+    "probe cache B4 decode",
+    "production cache GQA B1 prefill (gather+FP8 QK)",
+    "production cache GQA B4 prefill (gather+FP8 QK)"
+  ],
+  "hypotheses": [
+    [
+      "H1",
+      "Dynamic per-row Q scales or FP8 arithmetic unsupported",
+      "ruled out",
+      "All four B1/B4 prefill/decode QFP8WT controls pass; compiled batchmatmulfp8 confirmed."
+    ],
+    [
+      "H2",
+      "Current QFP8CH K packing incompatible with transposed FP8 matmul",
+      "confirmed",
+      "B1 prefill fails: batchmatmulfp8 cannot restickify input y."
+    ],
+    [
+      "H3",
+      "The mismatch depends on batch size or query length",
+      "ruled out",
+      "All four QFP8CH cases fail; all four QFP8WT controls pass."
+    ],
+    [
+      "H4",
+      "DL16 dequantization then weight repacking bridges the formats",
+      "confirmed",
+      "Separate DL16 expansion, then QFP8WT packing works for B1/B4 prefill; attention relative L2 1.373% / 1.296%. Fusing the bridge fails."
+    ],
+    [
+      "H5",
+      "Existing FP8 copy can directly repack QFP8CH to QFP8WT",
+      "ruled out",
+      "copy_ into QFP8WT fails: no mechanism to resolve stick incompatibility."
+    ],
+    [
+      "H6",
+      "Real head-major store/read has the same limitation",
+      "confirmed",
+      "Production QFP8CH store and DL16 readback pass at B1/B4. Native gather+FP8 QK fails both with unsupported stick expressions (64 versus 128 elements)."
+    ],
+    [
+      "H7",
+      "Granite GQA can fold groups into the query-row axis",
+      "confirmed",
+      "All four Granite-shaped GQA QFP8WT controls pass (B1/B4, prefill/decode). Folding groups into Q rows works."
+    ],
+    [
+      "H8",
+      "Standalone minimal torch-spyre repro shows same compiler error",
+      "confirmed",
+      "Minimal repro.py reproduces same batchmatmulfp8 error without vLLM/inference."
+    ]
+  ],
+  "experiments": [
+    {
+      "time": "2026-10-28T19:00:06.766158+00:00",
+      "hypothesis": "H8",
+      "command": "source analysis/fp8-qk-20261028/env.sh; timeout 180s python -u <spyre-inference>/.claude/skills/debug-spyre/logs/debug-20261028-184921-fp8-qk-cache-layout/repro.py",
+      "exit_code": 1,
+      "outcome": "Confirmed minimal compiler reproduction; see repro.log."
+    }
+  ],
+  "next_actions": "For direct cached FP8 QK, implement a real QFP8CH\u2192QFP8WT repack or a QFP8WT K-cache/store/gather path. Quantize Q once outside the page walk. A fresh-prefill fast path can pack the DL16 K projection directly, as the positive controls do. Model accuracy and performance evaluation must follow integration. The source prototype is retained as explicitly requested; no external issue/PR was opened.",
+  "completed_at": "2026-10-28T19:07:40.764543+00:00"
+}

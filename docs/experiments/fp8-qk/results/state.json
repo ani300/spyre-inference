@@ -1,0 +1,228 @@
+{
+  "status": "blocked",
+  "summary": "Branch implementation complete and validated. Staged path passes all four B1/B4 prefill/update+decode probes. Native full-page and partial writes fail dtype inference; native reader fails work division. Both paths are retained as requested.",
+  "hypotheses": [
+    [
+      "H1",
+      "Staged graph boundaries remain correct",
+      "confirmed: 4 hardware passes"
+    ],
+    [
+      "H2",
+      "Native full-page store is unsupported",
+      "confirmed failure: FP8/Long dtype propagation at B1/B4"
+    ],
+    [
+      "H3",
+      "Packed reader independently needs backend support",
+      "confirmed failure: QFP8WT descriptor lookup in work division at B1/B4"
+    ],
+    [
+      "H4",
+      "Native single-token updates need backend support",
+      "confirmed failure on first write at offset63, B1/B4; offsets64/127 covered only by CPU logic tests"
+    ]
+  ],
+  "results": [
+    {
+      "name": "staged-full-b1-q128",
+      "exit_code": 0,
+      "command": [
+        "<spyre-inference>/.venv/bin/python",
+        "-u",
+        "<spyre-inference>/examples/experimental/fp8_qk_cache.py",
+        "--path",
+        "staged",
+        "--operation",
+        "full",
+        "--batch",
+        "1",
+        "--query-len",
+        "128",
+        "--output",
+        "<results>/staged-full-b1-q128.json"
+      ],
+      "time": "2026-10-28T20:03:49.426513+00:00"
+    },
+    {
+      "name": "packed-full-b1-q128",
+      "exit_code": 1,
+      "command": [
+        "<spyre-inference>/.venv/bin/python",
+        "-u",
+        "<spyre-inference>/examples/experimental/fp8_qk_cache.py",
+        "--path",
+        "packed",
+        "--operation",
+        "full",
+        "--batch",
+        "1",
+        "--query-len",
+        "128",
+        "--output",
+        "<results>/packed-full-b1-q128.json"
+      ],
+      "time": "2026-10-28T20:04:06.273739+00:00"
+    },
+    {
+      "name": "packed-read-b1-q128",
+      "exit_code": 1,
+      "command": [
+        "<spyre-inference>/.venv/bin/python",
+        "-u",
+        "<spyre-inference>/examples/experimental/fp8_qk_cache.py",
+        "--path",
+        "packed",
+        "--operation",
+        "read",
+        "--batch",
+        "1",
+        "--query-len",
+        "128",
+        "--output",
+        "<results>/packed-read-b1-q128.json"
+      ],
+      "time": "2026-10-28T20:04:32.790287+00:00"
+    },
+    {
+      "name": "packed-update-b1-q1",
+      "exit_code": 1,
+      "command": [
+        "<spyre-inference>/.venv/bin/python",
+        "-u",
+        "<spyre-inference>/examples/experimental/fp8_qk_cache.py",
+        "--path",
+        "packed",
+        "--operation",
+        "update",
+        "--batch",
+        "1",
+        "--query-len",
+        "1",
+        "--output",
+        "<results>/packed-update-b1-q1.json"
+      ],
+      "time": "2026-10-28T20:04:57.208269+00:00"
+    },
+    {
+      "name": "staged-full-b4-q128",
+      "exit_code": 0,
+      "command": [
+        "<spyre-inference>/.venv/bin/python",
+        "-u",
+        "<spyre-inference>/examples/experimental/fp8_qk_cache.py",
+        "--path",
+        "staged",
+        "--operation",
+        "full",
+        "--batch",
+        "4",
+        "--query-len",
+        "128",
+        "--output",
+        "<results>/staged-full-b4-q128.json"
+      ],
+      "time": "2026-10-28T20:06:15.532441+00:00"
+    },
+    {
+      "name": "staged-update-b1-q1",
+      "exit_code": 0,
+      "command": [
+        "<spyre-inference>/.venv/bin/python",
+        "-u",
+        "<spyre-inference>/examples/experimental/fp8_qk_cache.py",
+        "--path",
+        "staged",
+        "--operation",
+        "update",
+        "--batch",
+        "1",
+        "--query-len",
+        "1",
+        "--output",
+        "<results>/staged-update-b1-q1.json"
+      ],
+      "time": "2026-10-28T20:06:55.468396+00:00"
+    },
+    {
+      "name": "staged-update-b4-q1",
+      "exit_code": 0,
+      "command": [
+        "<spyre-inference>/.venv/bin/python",
+        "-u",
+        "<spyre-inference>/examples/experimental/fp8_qk_cache.py",
+        "--path",
+        "staged",
+        "--operation",
+        "update",
+        "--batch",
+        "4",
+        "--query-len",
+        "1",
+        "--output",
+        "<results>/staged-update-b4-q1.json"
+      ],
+      "time": "2026-10-28T20:07:41.386333+00:00"
+    },
+    {
+      "name": "packed-full-b4-q128",
+      "exit_code": 1,
+      "command": [
+        "<spyre-inference>/.venv/bin/python",
+        "-u",
+        "<spyre-inference>/examples/experimental/fp8_qk_cache.py",
+        "--path",
+        "packed",
+        "--operation",
+        "full",
+        "--batch",
+        "4",
+        "--query-len",
+        "128",
+        "--output",
+        "<results>/packed-full-b4-q128.json"
+      ],
+      "time": "2026-10-28T20:07:58.087704+00:00"
+    },
+    {
+      "name": "packed-read-b4-q128",
+      "exit_code": 1,
+      "command": [
+        "<spyre-inference>/.venv/bin/python",
+        "-u",
+        "<spyre-inference>/examples/experimental/fp8_qk_cache.py",
+        "--path",
+        "packed",
+        "--operation",
+        "read",
+        "--batch",
+        "4",
+        "--query-len",
+        "128",
+        "--output",
+        "<results>/packed-read-b4-q128.json"
+      ],
+      "time": "2026-10-28T20:08:29.768264+00:00"
+    },
+    {
+      "name": "packed-update-b4-q1",
+      "exit_code": 1,
+      "command": [
+        "<spyre-inference>/.venv/bin/python",
+        "-u",
+        "<spyre-inference>/examples/experimental/fp8_qk_cache.py",
+        "--path",
+        "packed",
+        "--operation",
+        "update",
+        "--batch",
+        "4",
+        "--query-len",
+        "1",
+        "--output",
+        "<results>/packed-update-b4-q1.json"
+      ],
+      "time": "2026-10-28T20:09:05.330880+00:00"
+    }
+  ]
+}

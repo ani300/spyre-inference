@@ -1,0 +1,4 @@
+RUN gqa-native-b1-prefill
+{"name": "gqa-native-b1-prefill", "exit_code": 1, "command": ["<spyre-inference>/.venv/bin/python", "-u", "<spyre-inference>/.claude/skills/debug-spyre/logs/debug-20261028-184921-fp8-qk-cache-layout/cache_gqa_probe.py", "--mode", "native", "--batch", "1", "--query-len", "128", "--output", "<spyre-inference>/.claude/skills/debug-spyre/logs/debug-20261028-184921-fp8-qk-cache-layout/gqa-native-b1-prefill.json"], "time": "2026-10-28T19:04:11.168610+00:00"}
+RUN gqa-staged-b1-prefill
+{"name": "gqa-staged-b1-prefill", "exit_code": 0, "command": ["<spyre-inference>/.venv/bin/python", "-u", "<spyre-inference>/.claude/skills/debug-spyre/logs/debug-20261028-184921-fp8-qk-cache-layout/cache_gqa_probe.py", "--mode", "staged", "--batch", "1", "--query-len", "128", "--output", "<spyre-inference>/.claude/skills/debug-spyre/logs/debug-20261028-184921-fp8-qk-cache-layout/gqa-staged-b1-prefill.json"], "time": "2026-10-28T19:04:54.914176+00:00"}

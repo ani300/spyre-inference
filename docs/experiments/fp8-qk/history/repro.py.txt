@@ -1,0 +1,16 @@
+import torch
+import torch_spyre
+
+q = torch.randn(1, 2, 128, 128, dtype=torch.float16).to('spyre')
+k = torch.randn_like(q.cpu()).to('spyre')
+k_cache = torch.compile(lambda x: torch.ops.spyre.qfp8ch(x), fullgraph=True)(k)
+
+def qk(q, k_cache):
+    scale = torch.ops.spyre.quantscalepertokenfp8(q, 448.0)
+    q8 = torch.ops.spyre.quantize_fp8_with_scale(q, scale)
+    return torch.ops.spyre.scaled_bmm(
+        q8, k_cache.transpose(-1, -2), scale_a=scale, out_dtype=torch.float16
+    )
+
+print(k_cache.device_tensor_layout(), flush=True)
+torch.compile(qk, fullgraph=True)(q, k_cache)

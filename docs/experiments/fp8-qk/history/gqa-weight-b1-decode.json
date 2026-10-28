@@ -1,0 +1,26 @@
+{
+  "args": {
+    "mode": "weight",
+    "batch": 1,
+    "query_len": 1,
+    "output": "<spyre-inference>/.claude/skills/debug-spyre/logs/debug-20261028-184921-fp8-qk-cache-layout/gqa-weight-b1-decode.json"
+  },
+  "query_heads": 32,
+  "kv_heads": 8,
+  "head_size": 128,
+  "scores_vs_quantized_reference": {
+    "finite": true,
+    "max_abs": 0.07748186588287354,
+    "relative_l2": 0.01297948881983757
+  },
+  "attention_vs_quantized_reference": {
+    "finite": true,
+    "max_abs": 0.006552115082740784,
+    "relative_l2": 0.01161973737180233
+  },
+  "attention_vs_unquantized_reference": {
+    "finite": true,
+    "max_abs": 0.020478155463933945,
+    "relative_l2": 0.037722453474998474
+  }
+}

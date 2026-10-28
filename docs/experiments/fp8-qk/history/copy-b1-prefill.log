@@ -1,0 +1,51 @@
+key layout SpyreTensorLayout(device_size=[2, 128, 1, 1, 128], stride_map =[16384, 128, 128, -1, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8CH, valid_elements={})
+destination layout SpyreTensorLayout(device_size=[1, 2, 1, 128, 128], stride_map =[-1, 16384, 128, 128, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8WT, valid_elements={(0,): 1, (1,): 2, (2, 4): 128, (3,): 128})
+Traceback (most recent call last):
+  File "<spyre-inference>/.claude/skills/debug-spyre/logs/debug-20261028-184921-fp8-qk-cache-layout/probe.py", line 59, in <module>
+    key_t = torch.compile(copy_key, fullgraph=True)(key_t, storage)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py", line 1183, in compile_wrapper
+    raise e.remove_dynamo_frames() from None  # see TORCHDYNAMO_VERBOSE=1
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch/_inductor/compile_fx.py", line 1079, in _compile_fx_inner
+    raise InductorError(e, currentframe()).with_traceback(
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch/_inductor/compile_fx.py", line 1059, in _compile_fx_inner
+    mb_compiled_graph = fx_codegen_and_compile(
+                        ^^^^^^^^^^^^^^^^^^^^^^^
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch/_inductor/compile_fx.py", line 1847, in fx_codegen_and_compile
+    return scheme.codegen_and_compile(gm, example_inputs, inputs_to_check, graph_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch/_inductor/compile_fx.py", line 1608, in codegen_and_compile
+    compiled_module = graph.compile_to_module()
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch/_inductor/graph.py", line 2669, in compile_to_module
+    return self._compile_to_module()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch/_inductor/graph.py", line 2675, in _compile_to_module
+    self.codegen_with_cpp_wrapper() if self.cpp_wrapper else self.codegen()
+                                                             ^^^^^^^^^^^^^^
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch/_inductor/graph.py", line 2607, in codegen
+    self._update_scheduler()
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/patches.py", line 228, in _spyre_update_scheduler
+    _pre_scheduling_pass(self)
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/passes.py", line 562, in __call__
+    self._run_pass_loop(graph)
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/passes.py", line 608, in _run_pass_loop
+    pass_fn(graph)
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/optimize_restickify.py", line 870, in optimize_restickify_locations
+    beam_global_min_cost(operations)
+  File "<spyre-inference>/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/optimize_restickify.py", line 839, in beam_global_min_cost
+    raise _no_feasible_layout_error(op)
+torch._inductor.exc.InductorError: NotImplementedError: buf1 (Pointwise): no mechanism to resolve stick incompatibility
+  Inputs:
+
+    buf0:  size=[1, 2, 128, 128]  stride=[32768, 16384, 1, 128]  h_coords=[0, d0, d1, d2]
+      STL 0:  device_size=[2, 128, 1, 1, 128]  stride_map=[16384, 128, 128, -1, 1]  dtype=DataFormats.SEN143_FP8  d_coords=[d0, d2, 0, 0, d1]
+
+  Output:  size=[1, 2, 128, 128]  stride=[32768, 16384, 128, 1]  h_coords=[0, d0, d1, d2]
+    STL 0:  device_size=[1, 2, 1, 128, 128]  stride_map=[-1, 16384, 128, 128, 1]  dtype=DataFormats.SEN143_FP8  d_coords=[0, d0, 0, d1, d2]
+
+  Problem:
+    buf0 STL 0 --> Out STL 0
+
+Set TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS="+dynamo"

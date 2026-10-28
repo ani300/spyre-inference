@@ -1,0 +1,18 @@
+{
+  "args": {
+    "path": "packed",
+    "operation": "read",
+    "batch": 4,
+    "query_len": 128,
+    "output": "<results>/packed-read-b4-q128.json"
+  },
+  "torch": "2.13.0+cpu",
+  "torch_spyre": "0.6.0.dev355+head.gcbc79da3",
+  "status": "failed",
+  "stage": "packed_attention",
+  "allocated_k_layout": "SpyreTensorLayout(device_size=[4, 8, 1, 128, 128], stride_map =[131072, 16384, 128, 128, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8WT, valid_elements={(0,): 4, (1,): 8, (2, 4): 128, (3,): 128})",
+  "allocated_v_layout": "SpyreTensorLayout(device_size=[32, 128, 1, 128], stride_map =[16384, 128, 128, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8CH, valid_elements={})",
+  "seeded_k_layout": "SpyreTensorLayout(device_size=[4, 8, 1, 128, 128], stride_map =[131072, 16384, 128, 128, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8WT, valid_elements={(0,): 4, (1,): 8, (2, 4): 128, (3,): 128})",
+  "error_type": "InductorError",
+  "error": "StopIteration: \n\nSet TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS=\"+dynamo\"\n"
+}

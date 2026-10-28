@@ -1,0 +1,72 @@
+"""Render the retained experiment state and results into the session's HTML log."""
+
+import datetime
+import html
+import json
+from pathlib import Path
+
+root = Path(__file__).parent
+state = json.loads((root / "state.json").read_text())
+esc = html.escape
+parts = [
+    '<!doctype html><html lang="en"><meta charset="utf-8">',
+    "<title>FP8 QK cache layout experiment</title>",
+    "<style>body{font:16px system-ui;max-width:1200px;margin:40px auto;padding:0 20px}"
+    "table{border-collapse:collapse;width:100%}td,th{border:1px solid #aaa;padding:8px;"
+    "text-align:left}pre{white-space:pre-wrap;overflow-wrap:anywhere}"
+    ".confirmed{color:#176b32}.blocked{color:#994900}</style>",
+    f'<h1>FP8 QK cache layout — {esc(state["status"])}</h1>',
+    f"<p>Updated {datetime.datetime.now(datetime.timezone.utc).isoformat()}</p>",
+    f'<p>{esc(state["summary"])}</p>',
+    "<h2>Failure cluster</h2><ul>",
+    *(f"<li>{esc(node)}</li>" for node in state["cluster"]),
+    "</ul><h2>Hypothesis queue</h2><table><tr><th>ID</th><th>Hypothesis / test</th>"
+    "<th>Status</th><th>Outcome</th></tr>",
+]
+for row in state["hypotheses"]:
+    parts.append("<tr>" + "".join(f"<td>{esc(cell)}</td>" for cell in row) + "</tr>")
+parts.append("</table><h2>Cluster validation</h2><table><tr><th>Case</th><th>Native cache</th>"
+             "<th>QFP8WT control</th></tr>")
+for batch in (1, 4):
+    for phase in ("prefill", "decode"):
+        name = f"cache-b{batch}-{phase}"
+        control = f"weight-b{batch}-{phase}"
+        parts.append(f'<tr><td>B{batch} {phase}</td><td><a href="{root.name}/{name}.log">'
+                     f'Compiler layout failure</a></td><td><a href="{root.name}/{control}.json">'
+                     "Passed</a></td></tr>")
+for batch in (1, 4):
+    name = f"gqa-native-b{batch}-prefill"
+    control = f"gqa-staged-b{batch}-prefill"
+    if (root / f"{control}.json").exists():
+        parts.append(f'<tr><td>Production store + GQA B{batch} prefill</td>'
+                     f'<td><a href="{root.name}/{name}.log">Compiler layout failure</a></td>'
+                     f'<td><a href="{root.name}/{control}.json">Staged DL16 bridge passed</a></td></tr>')
+parts.append("</table><h2>Numerical results</h2><table><tr><th>Probe</th><th>QK relative L2</th>"
+             "<th>Attention relative L2</th><th>Result</th></tr>")
+for path in sorted(root.glob("*.json")):
+    result = json.loads(path.read_text())
+    if not isinstance(result, dict) or "attention_vs_quantized_reference" not in result:
+        continue
+    scores = result["scores_vs_quantized_reference"]["relative_l2"]
+    attn = result["attention_vs_quantized_reference"]["relative_l2"]
+    parts.append(f'<tr><td>{esc(path.stem)}</td><td>{scores:.3%}</td><td>{attn:.3%}</td>'
+                 f'<td><a href="{root.name}/{path.name}">JSON</a></td></tr>')
+parts.append("</table><p>Errors compare with a float32 CPU reference that quantizes Q/K to FP8. "
+             "These are synthetic kernel checks, not model accuracy measurements.</p>")
+parts.append("<h2>Experiment commands and logs</h2>")
+entries = []
+for name in ("matrix.json", "gqa-matrix.json", "cache-store-matrix.json", "cache-batch-matrix.json"):
+    path = root / name
+    if path.exists():
+        entries.extend(json.loads(path.read_text()))
+for entry in sorted(entries, key=lambda x: x["time"], reverse=True):
+    name = entry["name"]
+    parts.append(f'<h3>{esc(name)} — exit {entry["exit_code"]}</h3><p>{esc(entry["time"])} · '
+                 f'<a href="{root.name}/{name}.log">log</a></p><pre>'
+                 + esc(" ".join(entry["command"])) + "</pre>")
+parts.append("<h2>Other evidence</h2><ul>")
+for name in ("repro.py", "repro.log", "probe.py", "cache_gqa_probe.py", "state.json"):
+    parts.append(f'<li><a href="{root.name}/{name}">{name}</a></li>')
+parts.append("</ul><h2>Next actions</h2><p>" + esc(state.get("next_actions", "Finish pending probes."))
+             + "</p></html>")
+root.with_suffix(".html").write_text("\n".join(parts))

@@ -1,0 +1,29 @@
+{
+  "args": {
+    "key_layout": "weight",
+    "batch": 1,
+    "query_len": 128,
+    "key_len": 128,
+    "heads": 2,
+    "output": "<experiment-artifacts>/weight-b1-prefill.json"
+  },
+  "compile_seconds": 25.103106261696666,
+  "scores_vs_quantized_reference": {
+    "finite": true,
+    "max_abs": 0.22583675384521484,
+    "rms": 0.014294862747192383,
+    "relative_l2": 0.013827298767864704
+  },
+  "attention_vs_quantized_reference": {
+    "finite": true,
+    "max_abs": 0.041339218616485596,
+    "rms": 0.0033744957763701677,
+    "relative_l2": 0.012094005942344666
+  },
+  "attention_vs_unquantized_reference": {
+    "finite": true,
+    "max_abs": 0.08365195989608765,
+    "rms": 0.007874763570725918,
+    "relative_l2": 0.028220904991030693
+  }
+}

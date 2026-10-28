@@ -1,0 +1,40 @@
+<spyre-inference>/.venv/lib/python3.11/site-packages/torch_spyre/_monkey_patch.py:188: UserWarning: Backend Spyre does not support int64; downcasting to int32 may change values outside the 32-bit range. You can silence this via warnings.filterwarnings(...) or spyre.set_downcast_warning(False) or TORCH_SPYRE_DOWNCAST_WARN env. variable. (Triggered internally at /mnt/devel/inductor_src/torch-spyre-fp8-qk/torch_spyre/csrc/types_mapping.h:95.)
+  res = orig_to(self, *args, **kwargs)
+Production cache store finished SpyreTensorLayout(device_size=[8, 128, 1, 128], stride_map =[16384, 128, 128, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8CH, valid_elements={})
+{"args": {"mode": "staged", "batch": 1, "query_len": 128, "output": "<spyre-inference>/.claude/skills/debug-spyre/logs/debug-20261028-184921-fp8-qk-cache-layout/gqa-staged-b1-prefill.json"}, "query_heads": 32, "kv_heads": 8, "head_size": 128, "stored_k_vs_reference": {"finite": true, "max_abs": 16.0, "relative_l2": 0.010675468482077122}, "stored_v_vs_reference": {"finite": true, "max_abs": 16.0, "relative_l2": 0.006486278958618641}}
+{
+  "args": {
+    "mode": "staged",
+    "batch": 1,
+    "query_len": 128,
+    "output": "<spyre-inference>/.claude/skills/debug-spyre/logs/debug-20261028-184921-fp8-qk-cache-layout/gqa-staged-b1-prefill.json"
+  },
+  "query_heads": 32,
+  "kv_heads": 8,
+  "head_size": 128,
+  "stored_k_vs_reference": {
+    "finite": true,
+    "max_abs": 16.0,
+    "relative_l2": 0.010675468482077122
+  },
+  "stored_v_vs_reference": {
+    "finite": true,
+    "max_abs": 16.0,
+    "relative_l2": 0.006486278958618641
+  },
+  "scores_vs_quantized_reference": {
+    "finite": true,
+    "max_abs": 0.16586637496948242,
+    "relative_l2": 0.014436569064855576
+  },
+  "attention_vs_quantized_reference": {
+    "finite": true,
+    "max_abs": 0.24109387397766113,
+    "relative_l2": 0.013730139471590519
+  },
+  "attention_vs_unquantized_reference": {
+    "finite": true,
+    "max_abs": 0.15989315509796143,
+    "relative_l2": 0.04041009768843651
+  }
+}

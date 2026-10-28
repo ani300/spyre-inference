@@ -1,0 +1,16 @@
+{
+  "hardware_passed": 4,
+  "hardware_failed": 6,
+  "cpu_passed": 12,
+  "source_checks": [
+    "ruff",
+    "ty scoped to FP8 modules",
+    "py_compile"
+  ],
+  "native_failures": [
+    "FP8/Long dtype propagation in native store",
+    "StopIteration in work division after packed K gather"
+  ],
+  "source_base": "89c4e2598411cd93bbb1f98cd54d1260634d64d6",
+  "torch_spyre_source": "cbc79da3ab992fad10c80ef61ce6dae904882288"
+}

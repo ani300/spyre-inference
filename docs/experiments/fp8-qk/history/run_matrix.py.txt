@@ -1,0 +1,33 @@
+import datetime
+import html
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+root = Path(__file__).parent
+cases = [('weight', 4, 128), ('weight', 1, 1), ('weight', 4, 1),
+         ('cache', 4, 128), ('cache', 1, 1), ('cache', 4, 1),
+         ('copy', 1, 128), ('repack', 1, 128)]
+results = []
+for layout, batch, query_len in cases:
+    name = f'{layout}-b{batch}-' + ('decode' if query_len == 1 else 'prefill')
+    cmd = [sys.executable, '-u', str(root/'probe.py'), '--key-layout', layout,
+           '--batch', str(batch), '--query-len', str(query_len), '--output', str(root/f'{name}.json')]
+    print('RUN', name, flush=True)
+    with (root/f'{name}.log').open('w') as log:
+        result = subprocess.run(cmd, stdout=log, stderr=subprocess.STDOUT)
+    entry = dict(name=name, exit_code=result.returncode, command=cmd,
+                 time=datetime.datetime.now(datetime.timezone.utc).isoformat())
+    results.append(entry)
+    (root/'matrix.json').write_text(json.dumps(results, indent=2)+'\n')
+    print(json.dumps(entry), flush=True)
+    page = root.with_suffix('.html')
+    text = page.read_text()
+    marker = '<h2>Matrix progress</h2>'
+    text = text.split(marker)[0]
+    text += marker + '<table><tr><th>Probe</th><th>Exit code</th><th>Log</th></tr>'
+    for item in results:
+        name = item['name']
+        text += f'<tr><td>{html.escape(name)}</td><td>{item["exit_code"]}</td><td><a href="{root.name}/{name}.log">log</a></td></tr>'
+    page.write_text(text+'</table>')
