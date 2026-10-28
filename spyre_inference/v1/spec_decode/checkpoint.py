@@ -12,6 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# TEMPORARY compatibility for the vendored vllm-project/vllm#54448 XPress adaptation.
+# Published weight contract: vllm/model_executor/models/qwen3_dflash.py at ce9467b757.
+# Replace with upstream XPress loading on upgrade; retain the Spyre model overrides.
+# Cleanup: https://github.com/torch-spyre/spyre-inference/issues/1417
+# test_xpress_vendored.py flags native support.
+
 """Validate the published Qwen3 DFlash/XPress backbone weights."""
 
 from collections.abc import Mapping
@@ -21,7 +27,17 @@ import torch
 
 def validate_dflash_weights(config, weights: Mapping[str, torch.Tensor]) -> None:
     hidden = config.hidden_size
-    head = config.head_dim
+    head = getattr(config, "head_dim", None)
+    scope = "Only published Qwen3 DFlash/XPress checkpoint layouts are supported"
+    if (
+        head is None
+        or (getattr(config, "target_hidden_size", None) or hidden) != hidden
+        or getattr(config, "attention_bias", False)
+    ):
+        raise ValueError(
+            f"{scope}: require an explicit head_dim, equal target/draft hidden sizes, "
+            "and attention_bias=False"
+        )
     query = config.num_attention_heads * head
     kv = config.num_key_value_heads * head
     intermediate = config.intermediate_size
@@ -51,7 +67,7 @@ def validate_dflash_weights(config, weights: Mapping[str, torch.Tensor]) -> None
     unexpected = present - expected.keys() - optional
     if missing or unexpected:
         raise ValueError(
-            f"Invalid DFlash backbone weights: missing={sorted(missing)}, "
+            f"{scope}. Invalid DFlash backbone weights: missing={sorted(missing)}, "
             f"unexpected={sorted(unexpected)}"
         )
     for name in present & optional:
@@ -59,5 +75,5 @@ def validate_dflash_weights(config, weights: Mapping[str, torch.Tensor]) -> None
     for name, shape in expected.items():
         if tuple(weights[name].shape) != shape:
             raise ValueError(
-                f"Invalid {name} shape: expected {shape}, got {tuple(weights[name].shape)}"
+                f"{scope}. Invalid {name} shape: expected {shape}, got {tuple(weights[name].shape)}"
             )

@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# TEMPORARY XPress config bridge: vLLM 0.32 predates vllm-project/vllm#54448.
+# On the canary's failure, use upstream fields while retaining Spyre validation.
+# Cleanup: https://github.com/torch-spyre/spyre-inference/issues/1417
+
 """Serve the merged XPress contract through Spyre's pinned vLLM 0.32 V1 runner."""
 
 import torch

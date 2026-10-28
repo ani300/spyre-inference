@@ -169,6 +169,17 @@ def test_invalid_checkpoint_topc_is_rejected(config, value):
         validate_dflash_config(config)
 
 
+@pytest.mark.parametrize("source", ["checkpoint", "additional_config"])
+@pytest.mark.parametrize("value", [-1, True, 1.5])
+def test_invalid_refinement_passes_fail_before_model_loading(config, source, value):
+    if source == "checkpoint":
+        config.speculative_config.draft_model_config.hf_config.xpress_num_passes = value
+    else:
+        config.additional_config["spyre_xpress"]["num_passes"] = value
+    with pytest.raises(ValueError, match="xpress_num_passes must be a nonnegative integer"):
+        validate_dflash_config(config)
+
+
 def test_plain_dflash_does_not_accept_xpress_options(config):
     draft = config.speculative_config.draft_model_config.hf_config
     draft.architectures = ["DFlashDraftModel"]

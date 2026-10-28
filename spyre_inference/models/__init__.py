@@ -60,7 +60,8 @@ _ADAPTED_ARCHS: dict[str, str] = {
     ),
 }
 
-# Public XPress checkpoints predate native registration in our pinned vLLM.
+# Temporary XPress registrations; test_xpress_vendored.py flags the upstream migration.
+# Cleanup: https://github.com/torch-spyre/spyre-inference/issues/1417
 _NEW_ARCHS = {
     "Qwen3XPressModel": "spyre_inference.models.qwen3_dflash:SpyreDFlashQwen3ForCausalLM",
     "DFlashQwen3XPressModel": "spyre_inference.models.qwen3_dflash:SpyreDFlashQwen3ForCausalLM",
