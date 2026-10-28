@@ -12,6 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+# SPDX-License-Identifier: Apache-2.0
+
+# TEMPORARY VENDORED ADAPTATION: vllm-project/vllm#54448 postdates vLLM 0.32.0.
+# Source: https://github.com/vllm-project/vllm/blob/ce9467b757c024a55fea4d0919ac2e682f28a894/vllm/model_executor/models/qwen3_xpress.py
+# On upgrade, subclass upstream Qwen3XPressForCausalLM/head and retain only Spyre overrides.
+# Cleanup: https://github.com/torch-spyre/spyre-inference/issues/1417
+# test_xpress_vendored.py flags native support. Serving compiles these step helpers;
+# the CPU Jacobi oracle lives in tests/spec_decode/xpress_reference.py.
+
 from collections.abc import Mapping
 
 import torch
@@ -104,22 +114,6 @@ class XPressRefinerHead(nn.Module):
         state["mix_L"] = raw.tril() + torch.eye(self.block_size, dtype=raw.dtype, device=raw.device)
         self.load_state_dict(state, strict=True)
 
-    def hidden_cache(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch, block, _ = hidden_states.shape
-        local = self.down_h(hidden_states.flatten(0, 1)).view(batch, block, self.rank)
-        summary = self.down_g(hidden_states.mean(dim=1))[:, None, :].expand_as(local)
-        return torch.cat((local, summary), dim=-1)
-
-    def refine_bias(self, previous_ids: torch.Tensor, hidden_cache: torch.Tensor) -> torch.Tensor:
-        return self._refine_embeddings(self.w1(previous_ids), hidden_cache)
-
-    def _refine_embeddings(self, previous_embeddings, hidden_cache):
-        x = self.in_proj(torch.cat((hidden_cache, previous_embeddings), dim=-1))
-        x = self._mix_and_mlp(x)
-        if self._readout_t is not None:
-            return (x @ self._readout_t)[..., : self.w2.out_features]
-        return self.w2(x)
-
     def _mix_and_mlp(self, x):
         # Keep rank as the contiguous dimension for Spyre's stick layout.
         mixer = self.mix_L.permute(1, 2, 0) if self._mix_kjc is None else self._mix_kjc
@@ -127,7 +121,12 @@ class XPressRefinerHead(nn.Module):
         return x + self.mlp_down(F.silu(self.mlp_gate(x)) * self.mlp_up(x))
 
     def project_hidden_cache(self, hidden_states):
-        cache = self.hidden_cache(hidden_states)
+        batch, block, _ = hidden_states.shape
+        if block != self.block_size:
+            raise ValueError("XPress input block size must match the checkpoint's learned mixer")
+        local = self.down_h(hidden_states.flatten(0, 1)).view(batch, block, self.rank)
+        summary = self.down_g(hidden_states.mean(dim=1))[:, None, :].expand_as(local)
+        cache = torch.cat((local, summary), dim=-1)
         if self._hidden_proj_t is not None:
             return cache @ self._hidden_proj_t
         return F.linear(cache, self.in_proj.weight[:, : 2 * self.rank])
@@ -142,6 +141,7 @@ class XPressRefinerHead(nn.Module):
         return self._mix_and_mlp(projected_cache + token_projection)[:, 1:]
 
     def gather_readout(self, candidates):
+        """Candidate IDs must be flat for Spyre's embedding kernel."""
         return F.embedding(candidates, self.w2.weight)
 
     def refine_full(self, base, previous_ids, projected_cache):
@@ -160,36 +160,3 @@ class XPressRefinerHead(nn.Module):
             latent.reshape(batch * slots, self.rank, 1),
         ).view_as(base)
         return base + bias
-
-    def forward(
-        self,
-        base_logits: torch.Tensor,
-        hidden_states: torch.Tensor,
-        anchor_ids: torch.Tensor,
-        predecessor_ids: torch.Tensor,
-        num_passes: int = 6,
-    ) -> torch.Tensor:
-        """Return the B-1 greedy proposals while keeping slot zero fixed as the anchor."""
-        if base_logits.shape[1] != self.block_size or hidden_states.shape[1] != self.block_size:
-            raise ValueError("XPress input block size must match the checkpoint's learned mixer")
-        if num_passes < 0:
-            raise ValueError("The number of refinement passes cannot be negative")
-        base = base_logits[:, 1:]
-        draft = base.argmax(dim=-1)
-        if not num_passes:
-            return draft
-        cache = self.project_hidden_cache(hidden_states)
-        candidates = readout = None
-        if self.topc:
-            base, candidates = base.topk(min(self.topc, base.shape[-1]), dim=-1)
-            readout = self.gather_readout(candidates)
-        for _ in range(num_passes):
-            previous = torch.cat(
-                (predecessor_ids[:, None], anchor_ids[:, None], draft[:, :-1]), dim=1
-            )
-            if candidates is None:
-                draft = self.refine_full(base, previous, cache).argmax(dim=-1)
-            else:
-                logits = self.refine_candidates(base, previous, cache, readout)
-                draft = candidates.gather(-1, logits.argmax(dim=-1, keepdim=True)).squeeze(-1)
-        return draft

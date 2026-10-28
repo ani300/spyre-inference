@@ -70,3 +70,13 @@ def test_feature_width_mismatch_fails_before_loading(checkpoint):
     weights["fc.weight"] = torch.empty(128, 128, device="meta")
     with pytest.raises(ValueError, match="fc.weight shape"):
         validate_dflash_weights(config, weights)
+
+
+@pytest.mark.parametrize(
+    "name,value", [("target_hidden_size", 256), ("attention_bias", True), ("head_dim", None)]
+)
+def test_unpublished_backbone_layout_has_a_clear_scope_error(checkpoint, name, value):
+    config, weights = checkpoint
+    setattr(config, name, value)
+    with pytest.raises(ValueError, match="Only published Qwen3 DFlash/XPress checkpoint layouts"):
+        validate_dflash_weights(config, weights)
