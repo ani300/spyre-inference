@@ -1,5 +1,7 @@
 # Gemma 4 MoE with FP8 expert storage and FP8 matmuls
 
+> Archived layer-only assessment. The [integration report](README.md) supersedes its missing-feature list. Scripts on this branch now include the full-engine and direct-loader changes.
+
 Assessment date: 2026-10-29. Model: [RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic](https://huggingface.co/RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic), revision `ed35d7abe5d940da41b4ff06eb482feb0be8cb44`.
 
 **Result:** FP8 expert storage and FP8 grouped matmuls work at layer level with two workarounds: selected-weight repacking for gathered decode, and four resident QFP8WT pools for persistent prefill. Stock Gemma initialization still rejects quantized experts.

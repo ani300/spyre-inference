@@ -7,14 +7,14 @@ h1{font-size:32px;line-height:1.2}h2{font-size:24px;margin-top:40px;border-botto
 @media print{body{background:white}main{box-shadow:none;margin:0;padding:0;max-width:none}.controls{display:none}pre,table{break-inside:avoid}a{color:inherit}}
 </style></head><body><main><p class="pill">Spyre • experimental assessment • 29 October 2026</p><h1>Gemma 4: FP8 experts through the full inference engine</h1>
 <p>Model: <a href="https://huggingface.co/RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic">RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic</a>, revision <code>ed35d7abe5d940da41b4ff06eb482feb0be8cb44</code>. Assessment: 2026-10-29, TP1, text backbone.</p>
-<p><strong>The integrated B path generates text with FP8 expert storage and FP8 expert matmuls.</strong> The single-sentence FP16 KV-cache case passed and answered “The capital of France is Paris.” Remaining batch/cache cases are in progress. All 30 layers load, and the default compiled transformer blocks remain enabled.</p>
+<p><strong>The integrated B path generates text with FP8 expert storage and FP8 expert matmuls.</strong> The single- and four-sentence FP16 KV-cache cases passed. The default tiled attention path fails to compile an FP8 cache read at Gemma’s head geometry; the existing Python attention page loop passes all eight focused Gemma cache checks. Full-model FP8-cache retries with that workaround are running. All 30 layers load, and the default compiled transformer blocks remain enabled.</p>
 <section class="lab" aria-label="Interactive stick alignment example">
 <h2>Why the FP8 path needs different padding</h2>
-<p>DL16 splits Gemma’s 2816 hidden values into four chunks of 704. Each hardware stick holds 128 bytes. Switch formats to see one chunk:</p>
+<p>Each Gemma expert has intermediate width 704. Each hardware stick holds 128 bytes. Switch formats to see why the FP8 path pads this width:</p>
 <div class="controls"><button data-mode="dl16" aria-pressed="false">DL16: 704 values</button><button data-mode="partial" aria-pressed="false">FP8: 704 values</button><button data-mode="padded" aria-pressed="true">FP8: 768 values, padded</button></div>
-<div id="sticks" class="sticks"></div><p id="caption" class="caption" aria-live="polite">Six full FP8 sticks: 704 real values plus 64 zeros. Four chunks require H=3072.</p>
-<div class="flow"><div class="node">On-device routing<br>8 selected experts</div><b>→</b><div class="node">4 chunks per expert<br>32 grouped entries</div><b>→</b><div class="node">FP8 gate / up / down<br>DL16 scales + GELU + reductions</div></div>
-<p class="caption">This illustrates QFP8CH activation/channel sticks. Matmul weights use QFP8WT’s 2 × 64 arrangement. Both padded axes satisfy that layout too.</p></section><h2>What changed</h2>
+<div id="sticks" class="sticks"></div><p id="caption" class="caption" aria-live="polite">Six full FP8 sticks: 704 real values plus 64 zeros. The hidden width stays 2816.</p>
+<div class="flow"><div class="node">Checkpoint FP8 bytes<br>Pad I: 704 → 768</div><b>→</b><div class="node">Direct QFP8WT upload<br>128 resident experts per layer</div><b>→</b><div class="node">for_each_tile<br>FP8 gate / up / down matmuls</div></div><p class="caption">Device routing selects eight experts per token. The persistent workaround visits all 128 experts and weights their contributions; short token batches are padded to 128 rows and trimmed. No tokens are packed on CPU.</p>
+<p class="caption">The sticks above illustrate QFP8CH activations. Weights use QFP8WT’s 2 × 64 arrangement, built by the loader from the original FP8 codes. Gemma’s shared dense MLP needs the same treatment: K=2112 → 2176 before upload. Attention owns its FP16 or FP8 KV cache independently.</p></section><h2>What changed</h2>
 <ul>
 <li><a href="../../../spyre_inference/experimental/fp8_moe_method.py">FP8 MoE method</a>: replaces the unsupported compressed-tensors method with a Spyre implementation, reuses checkpoint expert loaders, folds Gemma's learned expert multiplier into the down-channel scale, and uploads gate/up/down directly as QFP8WT.</li>
 <li><a href="https://github.com/ani300/torch-spyre/tree/experiment/gemma4-fp8-moe-loader">torch-spyre loader branch</a>: extends <code>_dma_to_spyre_fp8_kernel</code> and its C++ data-conversion descriptor to rank-3 expert pools (also tested at rank 4). Source strides and offsets are respected; the destination uses canonical dense strides.</li>
@@ -22,7 +22,7 @@ h1{font-size:32px;line-height:1.2}h2{font-size:24px;margin-top:40px;border-botto
 <li><a href="../../../spyre_inference/moe.py">Engine bridge</a>: preserves the separate compiled routing and persistent-expert regions through the opaque MoE call inside each compiled transformer block. Prefill and decode share one FP8 expert representation. Short batches are zero-padded to 128 rows inside the MoE and trimmed before returning.</li>
 <li><a href="../../../spyre_inference/custom_ops/fp8_linear_kernel.py">Dense FP8 linear padding</a>: Gemma's shared MLP down projection has K=2112, which occupies 16.5 FP8 sticks. Pad its checkpoint bytes and activation to 2176 before FP8 matmul. Compiler-inserted padding otherwise loses QFP8WT and the matmul planner fails.</li>
 </ul>
-<p>The expert intermediate width is padded from 704 to 768. Checkpoint FP8 codes are never dequantized for storage or repacked on device by the integrated path. The original source expert parameters are released after upload. Per-output-channel scales remain separate from the FP8 codes.</p>
+<p>The expert intermediate width is padded from 704 to 768. Checkpoint FP8 codes are never dequantized for storage or repacked on device by the integrated path. The original source expert parameters are released after upload. Per-output-channel scales remain separate from the FP8 codes. Attention retains its existing DL16 computation, dequantizing an FP8 KV cache on read when that cache format is selected.</p>
 <pre><code class="language-text">At load time:
 checkpoint FP8 bytes → zero padding → rank-3 QFP8WT DMA → resident FP8 experts
                                                                ↓
@@ -50,6 +50,26 @@ The MoE sees only hidden states and router logits.
 <td><a href="results/e2e-final/fp16-b1.json">JSON</a></td>
 </tr>
 <tr>
+<td>Full model, FP16 KV, four sentences</td>
+<td>Generation passed, 16 output tokens per sentence</td>
+<td><a href="results/e2e-final/fp16-b4.json">JSON</a></td>
+</tr>
+<tr>
+<td>Full model, FP8 KV, one sentence, default attention</td>
+<td>Fails in FP8-page dequantization during attention prefill compilation</td>
+<td><a href="results/e2e-final/fp8-b1.log">log</a></td>
+</tr>
+<tr>
+<td>Gemma FP8 cache, unrolled attention, both head geometries × prefill/decode × one/four sequences</td>
+<td>8 numerical passes</td>
+<td><a href="results/e2e/attention-unrolled-probe.log">probe</a>, <a href="results/e2e/attention-unrolled-matrix.log">remaining cases</a></td>
+</tr>
+<tr>
+<td>CPU dispatch, padding, chunk equations and reduction</td>
+<td>8 passed</td>
+<td><a href="results/e2e/grouped-cpu-tests.log">log</a></td>
+</tr>
+<tr>
 <td>Rank-2/3/4 DMA, source views/offsets, grouped matmul</td>
 <td>14 passed</td>
 <td><a href="results/e2e/loader-tests-canonical.log">log</a></td>
@@ -71,7 +91,7 @@ The MoE sees only hidden states and router logits.
 <p>The earlier prototype uploaded FP8 code values through temporary DL16 tensors and called <code>qfp8wt</code> on device. A whole pool exceeded that conversion kernel's per-core address span; four smaller pools worked. That was a limitation of the prototype's conversion route, not a requirement of checkpoint loading. The extended loader now packs the checkpoint bytes directly, exactly where FP8 linear weights are packed. The earlier claim that full-pool device packing blocked engine integration was too broad.</p>
 <p>A roundtrip alone is insufficient: an incorrect layout can be inverted by the same incorrect descriptor. The loader tests therefore also consume the uploaded weights in an FP8 grouped matmul against an exact independent oracle. Source tensors with holes additionally exposed the need for canonical destination strides.</p>
 <h2>Reproduce</h2>
-<p>Use the two experiment branches with the current upstream bases: spyre-inference <code>d69bc3f</code>, torch-spyre <code>f2bb1f8d</code>. Both were re-fetched from upstream main for this assessment. Build and install the patched torch-spyre into the prepared inference venv; do not let <code>uv sync</code> restore the repository pins. Runtime/Flex, Deeptools, libaiupti and comms come from <code>sentient/</code>; only senlib comes from <code>/opt/ibm/spyre/senlib</code>.</p>
+<p>Use the two experiment branches with the current upstream bases: spyre-inference <code>d69bc3f</code>, torch-spyre <code>f2bb1f8d</code>. Both were re-fetched from upstream main for this assessment. <a href="integration-provenance.json">Integration provenance</a> records the implementation commits and lower-stack binary hashes. Build and install the patched torch-spyre into the prepared inference venv; do not let <code>uv sync</code> restore the repository pins. Runtime/Flex, Deeptools, libaiupti and comms come from <code>sentient/</code>; only senlib comes from <code>/opt/ibm/spyre/senlib</code>.</p>
 <p>From this spyre-inference checkout:</p>
 <pre><code class="language-bash">export DTI_PROJECT_ROOT=/mnt/devel/inductor_src
 source /mnt/devel/inductor_src/torch-spyre-docs/scripts/dev-env.sh
@@ -91,30 +111,42 @@ export VLLM_CACHE_ROOT=&quot;$PWD/.gemma-vllm-cache&quot;
 uv pip install --python &quot;$VIRTUAL_ENV/bin/python&quot; --no-deps --no-build-isolation \
   /mnt/devel/inductor_src/torch-spyre-gemma4-fp8
 
-# Serial full-model matrix: FP16 / FP8 KV caches × single / four sentences.
-python examples/experimental/run_gemma4_fp8_e2e.py --output-dir results/gemma-e2e
+# Serial full-model cases, each with single and four sentences.
+python examples/experimental/run_gemma4_fp8_e2e.py --kv-cache fp16 \
+  --output-dir results/gemma-e2e-fp16
+python examples/experimental/run_gemma4_fp8_e2e.py --kv-cache fp8 \
+  --attention-page-loop unrolled --output-dir results/gemma-e2e-fp8
 
 # One case; normal compiled transformer blocks remain enabled.
 python examples/experimental/gemma4_fp8_model.py --batch 4 --kv-cache fp8 \
-  --output results/gemma-fp8-b4.json
+  --attention-page-loop unrolled --output results/gemma-fp8-b4.json
 
 # Real benchmark-trace inputs; actual Gemma token lengths are checked, not truncated.
 python examples/experimental/run_gemma4_fp8_e2e.py --max-model-len 4096 \
   --dataset /mnt/models/online_benchmarking_data_reordered/aiops_results_2025.11.03_e2ee1b0_correct_order.jsonl \
-  --output-dir results/gemma-aiops
+  --attention-page-loop unrolled --output-dir results/gemma-aiops
+
+# Isolated attention comparison; omit the flag to reproduce the tiled compiler error.
+SPYRE_ATTN_FOR_EACH_TILE=0 python -m pytest examples/experimental/gemma4_fp8_attention.py -q
 
 # Numerical layer checks and focused dense-linear regression.
-python examples/experimental/gemma4_fp8_grouped.py --path persistent-dma \
-  --batch 1 --query-len 128 --output results/gemma-layer.json
+python examples/experimental/run_gemma4_fp8_matrix.py --path persistent-dma \
+  --output-dir results/gemma-layer-matrix
 python -m pytest tests/test_fp8_linear.py -q -m 'not upstream'
+python -m pytest --noconftest -o addopts= tests/models/test_fp8_grouped_moe.py -q
+
+# From the paired torch-spyre checkout, with the same environment:
+python -m pytest tests/inductor/test_fp8_prequantized_load.py -q
 </code></pre>
-<p>Run only one hardware workload at a time. <code>--eager-blocks</code> is an optional diagnostic that leaves FP8 kernels compiled while using eager transformer-block orchestration. JSON records failures and output tokens; the matrix preserves commands, logs and nonzero exits. The smoke test forces 16 output tokens (<code>ignore_eos=True</code>), so text after an end-of-turn marker is not part of the natural answer. Successful generation is a smoke result, not a claim of model-quality parity or speedup. The AIOps trace uses its original prompts and a fixed generated-token budget, so this is integration coverage rather than the full serving benchmark.</p>
+<p>Run only one hardware workload at a time. When using a torch-spyre source worktree directly, keep it first on <code>PYTHONPATH</code> after sourcing the environment, and use its rebuilt extension. <code>--eager-blocks</code> is an optional diagnostic that leaves FP8 kernels compiled while using eager transformer-block orchestration. JSON records failures and output tokens; the matrix preserves commands, logs and nonzero exits. The smoke test forces 16 output tokens (<code>ignore_eos=True</code>), so text after an end-of-turn marker is not part of the natural answer. Successful generation is a smoke result, not a claim of model-quality parity or speedup. The AIOps trace uses its original prompts and a fixed generated-token budget, so this is integration coverage rather than the full serving benchmark.</p>
+<p>The interactive <a href="report.html">HTML report</a> is generated from this file by <code>python docs/experiments/gemma4-fp8-moe/render_report.py</code> (requires <code>markdown-it-py</code>).</p>
 <h2>Remaining limitations</h2>
+<p>The default tiled FP8-cache prefill fails with <code>no mechanism to resolve stick incompatibility</code> while converting a gathered <code>[1,8,128,256]</code> FP8 page into the DL16 matmul layout. <code>--attention-page-loop unrolled</code> selects the existing <code>SPYRE_ATTN_FOR_EACH_TILE=0</code> attention implementation; expert <code>for_each_tile</code> stays enabled. The focused tests validate both Gemma head geometries and cache writes against the existing CPU reference. Longer page walks remain unmeasured.</p>
 <p>TP1, Gemma's GELU/full-softmax routing, 128 experts and top-k 8 only. The bridge rejects unsupported recipes and parallel configurations. The model's vision/audio towers are outside this experiment.</p>
 <p>Persistent decode computes all experts over padded rows, so it is a correctness workaround with substantial extra work. The native gathered FP8 decode path and shared chunk aliases still need compiler work. Neither the FP16 nor FP8 KV-cache choice removes that limitation, because expert storage is independent of the attention cache.</p>
 <p>The <a href="layer-assessment.md">original layer assessment</a> preserves the staged decode path, four-pool persistent path, failing native compiler probes and their numerical results. Those baseline files predate the direct-loader and engine integration changes.</p>
 <p class="foot">Self-contained HTML. Code, commands and raw results are linked alongside this report.</p></main><script>
-const cases={dl16:{real:704,total:704,per:64,text:'11 full DL16 sticks × 64 values = 704. Four chunks fit H=2816.'},partial:{real:704,total:704,per:128,text:'5 full FP8 sticks plus a half-filled sixth stick. This does not meet the prototype’s whole-stick chunk requirement.'},padded:{real:704,total:768,per:128,text:'6 full FP8 sticks: 704 real values + 64 explicit zeros. Four chunks require H=3072; the expert intermediate width is also padded to 768.'}};
+const cases={dl16:{real:704,total:704,per:64,text:'11 full DL16 sticks × 64 values = 704. No intermediate-width padding is needed.'},partial:{real:704,total:704,per:128,text:'5 full FP8 sticks plus a half-filled sixth stick. The FP8 matmul path needs explicit whole-stick padding.'},padded:{real:704,total:768,per:128,text:'6 full FP8 sticks: 704 real values + 64 explicit zeros. The loader adds these zeros to gate/up outputs and down inputs; they contribute zero to the result.'}};
 function show(mode){const c=cases[mode],box=document.getElementById('sticks');box.replaceChildren();for(let i=0;i<Math.ceil(c.total/c.per);i++){let filled=Math.max(0,Math.min(c.per,c.real-i*c.per));let stick=document.createElement('div');stick.className='stick';let fill=document.createElement('div');fill.className='fill';fill.style.width=(100*filled/c.per)+'%';let label=document.createElement('span');label.textContent=filled===c.per?c.per+' values':filled+(mode==='padded'?' + '+(c.per-filled)+' zero':' / '+c.per);stick.append(fill,label);box.append(stick)}document.getElementById('caption').textContent=c.text;document.querySelectorAll('button[data-mode]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.mode===mode?'true':'false'))}
 document.querySelectorAll('button[data-mode]').forEach(b=>b.addEventListener('click',()=>show(b.dataset.mode)));show('padded');
 </script></body></html>

@@ -29,6 +29,7 @@ def main():
     parser.add_argument("--max-tokens", type=int, default=16)
     parser.add_argument("--max-model-len", type=int, default=512)
     parser.add_argument("--dataset", type=Path)
+    parser.add_argument("--attention-page-loop", choices=["tiled", "unrolled"])
     parser.add_argument("--eager-blocks", action="store_true")
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -55,6 +56,8 @@ def main():
             ]
             if args.dataset:
                 command.extend(["--dataset", str(args.dataset)])
+            if args.attention_page_loop:
+                command.extend(["--attention-page-loop", args.attention_page_loop])
             if args.eager_blocks:
                 command.append("--eager-blocks")
             (args.output_dir / f"{name}.command.json").write_text(

@@ -1,0 +1,27 @@
+[
+  {
+    "case": "fp16-b1",
+    "returncode": 0,
+    "passed": true,
+    "stage": null
+  },
+  {
+    "case": "fp16-b4",
+    "returncode": 0,
+    "passed": true,
+    "stage": null
+  },
+  {
+    "case": "fp8-b1",
+    "returncode": 1,
+    "passed": false,
+    "stage": "generate"
+  },
+  {
+    "case": "fp8-b4",
+    "returncode": 143,
+    "passed": false,
+    "stage": "warmup",
+    "status": "interrupted"
+  }
+]

@@ -647,8 +647,9 @@ def test_traced_dispatch_inlines_the_persistent_form_without_compiled_regions(
         assert calls[0][1] == torch.float32, "routing must stay in the logits' dtype in-graph"
 
 
-def test_moe_runner_traces_only_stick_aligned_batches():
-    """In-graph routing only lowers at whole sticks; other batches keep the opaque op."""
+@pytest.mark.parametrize("fp8_experts", [False, True])
+def test_moe_runner_traces_only_stick_aligned_batches(fp8_experts):
+    """FP8 keeps separate compiled regions; DL16 may inline whole-stick batches."""
     from vllm.model_executor.custom_op import op_registry_oot
     from vllm.model_executor.layers.fused_moe.runner import moe_runner
 
@@ -657,12 +658,19 @@ def test_moe_runner_traces_only_stick_aligned_batches():
     assert op_registry_oot["MoERunner"] is SpyreMoERunner
     runner = object.__new__(SpyreMoERunner)
     runner.moe_config = SimpleNamespace(in_dtype=torch.float16)
+    runner.routed_experts = SimpleNamespace(
+        quant_method=SimpleNamespace(spyre_fp8_experts=fp8_experts)
+    )
     runner._shared_experts = None
     runner._select_forward()
-    assert runner._entry_for(512) is moe_runner._moe_forward
+    expected = torch.ops.vllm.moe_forward if fp8_experts else moe_runner._moe_forward
+    assert runner._entry_for(512) is expected
     assert runner._entry_for(8) is torch.ops.vllm.moe_forward
     runner._shared_experts = object()
-    assert runner._entry_for(64) is moe_runner._moe_forward_shared
+    expected_shared = (
+        torch.ops.vllm.moe_forward_shared if fp8_experts else moe_runner._moe_forward_shared
+    )
+    assert runner._entry_for(64) is expected_shared
     assert runner._entry_for(3) is torch.ops.vllm.moe_forward_shared
 
 

@@ -34,12 +34,19 @@ def main():
     parser.add_argument("--dataset", type=Path, help="Spyre benchmark JSONL input trace")
     parser.add_argument("--dataset-offset", type=int, default=0)
     parser.add_argument(
+        "--attention-page-loop",
+        choices=["tiled", "unrolled"],
+        help="Override only the attention page loop; FP8 MoE stays persistent",
+    )
+    parser.add_argument(
         "--eager-blocks",
         action="store_true",
         help="Keep block orchestration eager; FP8 kernels still compile",
     )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    if args.attention_page_loop:
+        os.environ["SPYRE_ATTN_FOR_EACH_TILE"] = str(int(args.attention_page_loop == "tiled"))
     os.environ.setdefault("HF_HOME", "/mnt/models/hf_cache")
     os.environ.setdefault("SPYRE_NUM_CPUS", "8")
     result = {
@@ -51,7 +58,13 @@ def main():
     result["versions"] = {p: version(p) for p in ("torch", "torch-spyre", "vllm")}
     result["environment"] = {
         key: os.environ.get(key)
-        for key in ("SPYRE_ATTN_RECORD", "SPYRE_KERNEL_CACHE", "SPYRE_NUM_CPUS", "PYTHONPATH")
+        for key in (
+            "SPYRE_ATTN_RECORD",
+            "SPYRE_ATTN_FOR_EACH_TILE",
+            "SPYRE_KERNEL_CACHE",
+            "SPYRE_NUM_CPUS",
+            "PYTHONPATH",
+        )
     }
     engine = None
     stage = "startup"

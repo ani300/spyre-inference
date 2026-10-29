@@ -2,7 +2,7 @@
 
 Model: [RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic](https://huggingface.co/RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic), revision `ed35d7abe5d940da41b4ff06eb482feb0be8cb44`. Assessment: 2026-10-29, TP1, text backbone.
 
-**The integrated B path generates text with FP8 expert storage and FP8 expert matmuls.** The single-sentence FP16 KV-cache case passed and answered “The capital of France is Paris.” Remaining batch/cache cases are in progress. All 30 layers load, and the default compiled transformer blocks remain enabled.
+**The integrated B path generates text with FP8 expert storage and FP8 expert matmuls.** The single- and four-sentence FP16 KV-cache cases passed. The default tiled attention path fails to compile an FP8 cache read at Gemma’s head geometry; the existing Python attention page loop passes all eight focused Gemma cache checks. Full-model FP8-cache retries with that workaround are running. All 30 layers load, and the default compiled transformer blocks remain enabled.
 
 ## What changed
 
@@ -12,7 +12,7 @@ Model: [RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic](https://huggingface.co/RedHatAI
 - [Engine bridge](../../../spyre_inference/moe.py): preserves the separate compiled routing and persistent-expert regions through the opaque MoE call inside each compiled transformer block. Prefill and decode share one FP8 expert representation. Short batches are zero-padded to 128 rows inside the MoE and trimmed before returning.
 - [Dense FP8 linear padding](../../../spyre_inference/custom_ops/fp8_linear_kernel.py): Gemma's shared MLP down projection has K=2112, which occupies 16.5 FP8 sticks. Pad its checkpoint bytes and activation to 2176 before FP8 matmul. Compiler-inserted padding otherwise loses QFP8WT and the matmul planner fails.
 
-The expert intermediate width is padded from 704 to 768. Checkpoint FP8 codes are never dequantized for storage or repacked on device by the integrated path. The original source expert parameters are released after upload. Per-output-channel scales remain separate from the FP8 codes.
+The expert intermediate width is padded from 704 to 768. Checkpoint FP8 codes are never dequantized for storage or repacked on device by the integrated path. The original source expert parameters are released after upload. Per-output-channel scales remain separate from the FP8 codes. Attention retains its existing DL16 computation, dequantizing an FP8 KV cache on read when that cache format is selected.
 
 ```text
 At load time:
@@ -32,6 +32,10 @@ The MoE sees only hidden states and router logits.
 | Check | Result | Evidence |
 | --- | --- | --- |
 | Full model, FP16 KV, one sentence | Generation passed, 16 output tokens | [JSON](results/e2e-final/fp16-b1.json) |
+| Full model, FP16 KV, four sentences | Generation passed, 16 output tokens per sentence | [JSON](results/e2e-final/fp16-b4.json) |
+| Full model, FP8 KV, one sentence, default attention | Fails in FP8-page dequantization during attention prefill compilation | [log](results/e2e-final/fp8-b1.log) |
+| Gemma FP8 cache, unrolled attention, both head geometries × prefill/decode × one/four sequences | 8 numerical passes | [probe](results/e2e/attention-unrolled-probe.log), [remaining cases](results/e2e/attention-unrolled-matrix.log) |
+| CPU dispatch, padding, chunk equations and reduction | 8 passed | [log](results/e2e/grouped-cpu-tests.log) |
 | Rank-2/3/4 DMA, source views/offsets, grouped matmul | 14 passed | [log](results/e2e/loader-tests-canonical.log) |
 | Real layer 0, 128 experts, 128 tokens, direct DMA + persistent FP8 | Pass: 3.90% global relative L2, 5.30% worst row | [JSON](results/e2e/persistent-dma-b1-q128.json), [log](results/e2e/persistent-dma-b1-q128.log) |
 | Full model, first attempt | All experts load; shared dense MLP's unaligned K loses QFP8WT during compilation | [diagnostic log](results/e2e/fp16-b1-attempt2.log) |
@@ -46,7 +50,7 @@ A roundtrip alone is insufficient: an incorrect layout can be inverted by the sa
 
 ## Reproduce
 
-Use the two experiment branches with the current upstream bases: spyre-inference `d69bc3f`, torch-spyre `f2bb1f8d`. Both were re-fetched from upstream main for this assessment. Build and install the patched torch-spyre into the prepared inference venv; do not let `uv sync` restore the repository pins. Runtime/Flex, Deeptools, libaiupti and comms come from `sentient/`; only senlib comes from `/opt/ibm/spyre/senlib`.
+Use the two experiment branches with the current upstream bases: spyre-inference `d69bc3f`, torch-spyre `f2bb1f8d`. Both were re-fetched from upstream main for this assessment. [Integration provenance](integration-provenance.json) records the implementation commits and lower-stack binary hashes. Build and install the patched torch-spyre into the prepared inference venv; do not let `uv sync` restore the repository pins. Runtime/Flex, Deeptools, libaiupti and comms come from `sentient/`; only senlib comes from `/opt/ibm/spyre/senlib`.
 
 From this spyre-inference checkout:
 
@@ -69,27 +73,41 @@ export VLLM_CACHE_ROOT="$PWD/.gemma-vllm-cache"
 uv pip install --python "$VIRTUAL_ENV/bin/python" --no-deps --no-build-isolation \
   /mnt/devel/inductor_src/torch-spyre-gemma4-fp8
 
-# Serial full-model matrix: FP16 / FP8 KV caches × single / four sentences.
-python examples/experimental/run_gemma4_fp8_e2e.py --output-dir results/gemma-e2e
+# Serial full-model cases, each with single and four sentences.
+python examples/experimental/run_gemma4_fp8_e2e.py --kv-cache fp16 \
+  --output-dir results/gemma-e2e-fp16
+python examples/experimental/run_gemma4_fp8_e2e.py --kv-cache fp8 \
+  --attention-page-loop unrolled --output-dir results/gemma-e2e-fp8
 
 # One case; normal compiled transformer blocks remain enabled.
 python examples/experimental/gemma4_fp8_model.py --batch 4 --kv-cache fp8 \
-  --output results/gemma-fp8-b4.json
+  --attention-page-loop unrolled --output results/gemma-fp8-b4.json
 
 # Real benchmark-trace inputs; actual Gemma token lengths are checked, not truncated.
 python examples/experimental/run_gemma4_fp8_e2e.py --max-model-len 4096 \
   --dataset /mnt/models/online_benchmarking_data_reordered/aiops_results_2025.11.03_e2ee1b0_correct_order.jsonl \
-  --output-dir results/gemma-aiops
+  --attention-page-loop unrolled --output-dir results/gemma-aiops
+
+# Isolated attention comparison; omit the flag to reproduce the tiled compiler error.
+SPYRE_ATTN_FOR_EACH_TILE=0 python -m pytest examples/experimental/gemma4_fp8_attention.py -q
 
 # Numerical layer checks and focused dense-linear regression.
-python examples/experimental/gemma4_fp8_grouped.py --path persistent-dma \
-  --batch 1 --query-len 128 --output results/gemma-layer.json
+python examples/experimental/run_gemma4_fp8_matrix.py --path persistent-dma \
+  --output-dir results/gemma-layer-matrix
 python -m pytest tests/test_fp8_linear.py -q -m 'not upstream'
+python -m pytest --noconftest -o addopts= tests/models/test_fp8_grouped_moe.py -q
+
+# From the paired torch-spyre checkout, with the same environment:
+python -m pytest tests/inductor/test_fp8_prequantized_load.py -q
 ```
 
-Run only one hardware workload at a time. `--eager-blocks` is an optional diagnostic that leaves FP8 kernels compiled while using eager transformer-block orchestration. JSON records failures and output tokens; the matrix preserves commands, logs and nonzero exits. The smoke test forces 16 output tokens (`ignore_eos=True`), so text after an end-of-turn marker is not part of the natural answer. Successful generation is a smoke result, not a claim of model-quality parity or speedup. The AIOps trace uses its original prompts and a fixed generated-token budget, so this is integration coverage rather than the full serving benchmark.
+Run only one hardware workload at a time. When using a torch-spyre source worktree directly, keep it first on `PYTHONPATH` after sourcing the environment, and use its rebuilt extension. `--eager-blocks` is an optional diagnostic that leaves FP8 kernels compiled while using eager transformer-block orchestration. JSON records failures and output tokens; the matrix preserves commands, logs and nonzero exits. The smoke test forces 16 output tokens (`ignore_eos=True`), so text after an end-of-turn marker is not part of the natural answer. Successful generation is a smoke result, not a claim of model-quality parity or speedup. The AIOps trace uses its original prompts and a fixed generated-token budget, so this is integration coverage rather than the full serving benchmark.
+
+The interactive [HTML report](report.html) is generated from this file by `python docs/experiments/gemma4-fp8-moe/render_report.py` (requires `markdown-it-py`).
 
 ## Remaining limitations
+
+The default tiled FP8-cache prefill fails with `no mechanism to resolve stick incompatibility` while converting a gathered `[1,8,128,256]` FP8 page into the DL16 matmul layout. `--attention-page-loop unrolled` selects the existing `SPYRE_ATTN_FOR_EACH_TILE=0` attention implementation; expert `for_each_tile` stays enabled. The focused tests validate both Gemma head geometries and cache writes against the existing CPU reference. Longer page walks remain unmeasured.
 
 TP1, Gemma's GELU/full-softmax routing, 128 experts and top-k 8 only. The bridge rejects unsupported recipes and parallel configurations. The model's vision/audio towers are outside this experiment.
 

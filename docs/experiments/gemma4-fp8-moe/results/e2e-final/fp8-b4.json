@@ -1,0 +1,6 @@
+{
+  "passed": false,
+  "stage": "warmup",
+  "status": "interrupted",
+  "reason": "Stopped after the single-sentence FP8 cache attention failure to investigate with a narrow reproducer."
+}

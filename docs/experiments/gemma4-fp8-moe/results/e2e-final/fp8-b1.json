@@ -1,0 +1,53 @@
+{
+  "batch": 1,
+  "kv_cache": "fp8",
+  "max_tokens": 16,
+  "max_model_len": 512,
+  "dataset": null,
+  "dataset_offset": 0,
+  "eager_blocks": false,
+  "output": "docs/experiments/gemma4-fp8-moe/results/e2e-final/fp8-b1.json",
+  "passed": false,
+  "versions": {
+    "torch": "2.13.0+cpu",
+    "torch-spyre": "0.6.0.dev374+experimentgemma4fp8m.gf2bb1f8d.dirty",
+    "vllm": "0.32.0+empty"
+  },
+  "environment": {
+    "SPYRE_ATTN_RECORD": "0",
+    "SPYRE_KERNEL_CACHE": "1",
+    "SPYRE_NUM_CPUS": "8",
+    "PYTHONPATH": "/mnt/devel/inductor_src/torch-spyre-gemma4-fp8:/mnt/devel/inductor_src/spyre-inference-gemma4-fp8:/mnt/devel/inductor_src/sentient/runtime/lib"
+  },
+  "settings": {
+    "model": "RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic",
+    "revision": "ed35d7abe5d940da41b4ff06eb482feb0be8cb44",
+    "tokenizer_revision": "ed35d7abe5d940da41b4ff06eb482feb0be8cb44",
+    "dtype": "float16",
+    "hf_overrides": {
+      "architectures": [
+        "Gemma4ForCausalLM"
+      ]
+    },
+    "max_model_len": 512,
+    "max_num_seqs": 1,
+    "max_num_batched_tokens": 128,
+    "compilation_config": {
+      "compile_sizes": [
+        1,
+        128
+      ]
+    },
+    "kv_cache_dtype": "fp8",
+    "num_gpu_blocks_override": 5,
+    "enforce_eager": false
+  },
+  "startup_seconds": 417.1484234929085,
+  "prompt_lengths": [
+    23
+  ],
+  "stage": "generate",
+  "error_type": "EngineDeadError",
+  "error": "EngineCore encountered an issue. See stack trace (above) for the root cause.",
+  "traceback": "Traceback (most recent call last):\n  File \"/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/examples/experimental/gemma4_fp8_model.py\", line 112, in main\n    outputs = engine.generate(\n              ^^^^^^^^^^^^^^^^\n  File \"/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/vllm/entrypoints/llm.py\", line 473, in generate\n    return self._run_completion(\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/vllm/entrypoints/common/offline.py\", line 363, in _run_completion\n    return self._run_engine(use_tqdm=use_tqdm, output_type=output_type)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/vllm/entrypoints/common/offline.py\", line 611, in _run_engine\n    step_outputs = self.llm_engine.step()\n                   ^^^^^^^^^^^^^^^^^^^^^^\n  File \"/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/vllm/v1/engine/llm_engine.py\", line 327, in step\n    outputs = self.engine_core.get_output()\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/vllm/v1/engine/core_client.py\", line 996, in get_output\n    raise self._format_exception(outputs) from None\nvllm.v1.engine.exceptions.EngineDeadError: EngineCore encountered an issue. See stack trace (above) for the root cause.\n"
+}

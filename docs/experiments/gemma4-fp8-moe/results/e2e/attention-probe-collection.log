@@ -1,0 +1,34 @@
+W1029 18:55:01.112000 962496 torch/_library/triton.py:53] Triton not available, find_triton_kernels = []
+[vllm-upstream] no `upstream` in the -m expression, skipping upstream test collection (use -m upstream, or --upstream to add them to another marker expression)
+Spyre host: hard-exiting (code 0) past finalization to skip the senlib teardown abort
+examples/experimental/gemma4_fp8_attention.py::test_gemma_fp8_cache[spyre-STOCK_TORCH_COMPILE-prefill_one-gemma_sliding]
+examples/experimental/gemma4_fp8_attention.py::test_gemma_fp8_cache[spyre-STOCK_TORCH_COMPILE-prefill_one-gemma_global]
+examples/experimental/gemma4_fp8_attention.py::test_gemma_fp8_cache[spyre-STOCK_TORCH_COMPILE-prefill_four-gemma_sliding]
+examples/experimental/gemma4_fp8_attention.py::test_gemma_fp8_cache[spyre-STOCK_TORCH_COMPILE-prefill_four-gemma_global]
+examples/experimental/gemma4_fp8_attention.py::test_gemma_fp8_cache[spyre-STOCK_TORCH_COMPILE-decode_one-gemma_sliding]
+examples/experimental/gemma4_fp8_attention.py::test_gemma_fp8_cache[spyre-STOCK_TORCH_COMPILE-decode_one-gemma_global]
+examples/experimental/gemma4_fp8_attention.py::test_gemma_fp8_cache[spyre-STOCK_TORCH_COMPILE-decode_four-gemma_sliding]
+examples/experimental/gemma4_fp8_attention.py::test_gemma_fp8_cache[spyre-STOCK_TORCH_COMPILE-decode_four-gemma_global]
+
+=============================== warnings summary ===============================
+../spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/torch/jit/_script.py:365: 14 warnings
+  /mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/torch/jit/_script.py:365: DeprecationWarning: `torch.jit.script_method` is deprecated. Please switch to `torch.compile` or `torch.export`.
+    warnings.warn(
+
+../spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/_pytest/config/__init__.py:1636
+  /mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/_pytest/config/__init__.py:1636: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+../spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/_pytest/config/__init__.py:1636
+  /mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/_pytest/config/__init__.py:1636: PytestConfigWarning: Unknown config option: timeout
+
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+../spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/_pytest/config/__init__.py:1636
+  /mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/_pytest/config/__init__.py:1636: PytestConfigWarning: Unknown config option: timeout_method
+
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+8 tests collected in 0.11s

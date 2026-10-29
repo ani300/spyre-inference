@@ -1,0 +1,30 @@
+W1029 18:51:32.455000 959714 torch/_library/triton.py:53] Triton not available, find_triton_kernels = []
+[vllm-upstream] no `upstream` in the -m expression, skipping upstream test collection (use -m upstream, or --upstream to add them to another marker expression)
+.......                                                                  [100%]Spyre host: hard-exiting (code 0) past finalization to skip the senlib teardown abort
+
+=============================== warnings summary ===============================
+../spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/torch/jit/_script.py:365: 14 warnings
+  /mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/torch/jit/_script.py:365: DeprecationWarning: `torch.jit.script_method` is deprecated. Please switch to `torch.compile` or `torch.export`.
+    warnings.warn(
+
+../spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/_pytest/config/__init__.py:1636
+  /mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/_pytest/config/__init__.py:1636: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+../spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/_pytest/config/__init__.py:1636
+  /mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/_pytest/config/__init__.py:1636: PytestConfigWarning: Unknown config option: timeout
+
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+../spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/_pytest/config/__init__.py:1636
+  /mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/_pytest/config/__init__.py:1636: PytestConfigWarning: Unknown config option: timeout_method
+
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+tests/attention/test_spyre_head_major_attn.py::test_gemma_fp8_cache[spyre-STOCK_TORCH_COMPILE-prefill_one-gemma_global]
+  /mnt/devel/inductor_src/torch-spyre-gemma4-fp8/torch_spyre/_monkey_patch.py:188: UserWarning: Backend Spyre does not support int64; downcasting to int32 may change values outside the 32-bit range. You can silence this via warnings.filterwarnings(...) or spyre.set_downcast_warning(False) or TORCH_SPYRE_DOWNCAST_WARN env. variable. (Triggered internally at /mnt/devel/inductor_src/torch-spyre-gemma4-fp8/torch_spyre/csrc/types_mapping.h:95.)
+    res = orig_to(self, *args, **kwargs)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+7 passed, 1 deselected, 18 warnings in 156.88s (0:02:36)

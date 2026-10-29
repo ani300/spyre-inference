@@ -1,0 +1,145 @@
+{
+  "batch": 4,
+  "kv_cache": "fp16",
+  "max_tokens": 16,
+  "max_model_len": 512,
+  "dataset": null,
+  "dataset_offset": 0,
+  "eager_blocks": false,
+  "output": "docs/experiments/gemma4-fp8-moe/results/e2e-final/fp16-b4.json",
+  "passed": true,
+  "versions": {
+    "torch": "2.13.0+cpu",
+    "torch-spyre": "0.6.0.dev374+experimentgemma4fp8m.gf2bb1f8d.dirty",
+    "vllm": "0.32.0+empty"
+  },
+  "environment": {
+    "SPYRE_ATTN_RECORD": "0",
+    "SPYRE_KERNEL_CACHE": "1",
+    "SPYRE_NUM_CPUS": "8",
+    "PYTHONPATH": "/mnt/devel/inductor_src/torch-spyre-gemma4-fp8:/mnt/devel/inductor_src/spyre-inference-gemma4-fp8:/mnt/devel/inductor_src/sentient/runtime/lib"
+  },
+  "settings": {
+    "model": "RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic",
+    "revision": "ed35d7abe5d940da41b4ff06eb482feb0be8cb44",
+    "tokenizer_revision": "ed35d7abe5d940da41b4ff06eb482feb0be8cb44",
+    "dtype": "float16",
+    "hf_overrides": {
+      "architectures": [
+        "Gemma4ForCausalLM"
+      ]
+    },
+    "max_model_len": 512,
+    "max_num_seqs": 4,
+    "max_num_batched_tokens": 128,
+    "compilation_config": {
+      "compile_sizes": [
+        1,
+        2,
+        4,
+        128
+      ]
+    },
+    "kv_cache_dtype": "auto",
+    "num_gpu_blocks_override": 17,
+    "enforce_eager": false
+  },
+  "startup_seconds": 654.3431292306632,
+  "prompt_lengths": [
+    23,
+    24,
+    22,
+    19
+  ],
+  "generation_seconds": 146.76119261607528,
+  "outputs": [
+    {
+      "prompt": "What is the capital of France? Answer briefly.",
+      "text": "The capital of France is Paris.\nthought\nThe capital of France",
+      "token_ids": [
+        818,
+        5279,
+        529,
+        7001,
+        563,
+        9079,
+        236761,
+        106,
+        107,
+        45518,
+        107,
+        101,
+        818,
+        5279,
+        529,
+        7001
+      ]
+    },
+    {
+      "prompt": "Compute 7 multiplied by 8. Answer briefly.",
+      "text": "56//thought\n56\nthought\n",
+      "token_ids": [
+        236810,
+        236825,
+        106,
+        106,
+        106,
+        715,
+        45518,
+        107,
+        101,
+        236810,
+        236825,
+        106,
+        106,
+        107,
+        45518,
+        107
+      ]
+    },
+    {
+      "prompt": "Write one sentence explaining why leaves look green.",
+      "text": "Leaves look green because they contain a pigment called chlorophyll that absorbs red and blue light",
+      "token_ids": [
+        179880,
+        1385,
+        3826,
+        1547,
+        901,
+        3014,
+        496,
+        38161,
+        2760,
+        112242,
+        600,
+        81757,
+        2604,
+        532,
+        3730,
+        2214
+      ]
+    },
+    {
+      "prompt": "Name three common programming languages.",
+      "text": "Three common programming languages are **Python**, **JavaScript**, and **Java**.",
+      "token_ids": [
+        19765,
+        3364,
+        14929,
+        15579,
+        659,
+        5213,
+        32651,
+        125546,
+        5213,
+        44195,
+        125546,
+        532,
+        5213,
+        19102,
+        84750,
+        106
+      ]
+    }
+  ]
+}
