@@ -1404,6 +1404,8 @@ class SpyreAttentionImpl(AttentionImpl[SpyreAttentionMetadata]):
         layer: AttentionLayer,
         kv_cache: SpyrePagedKVCache,
         builder: "SpyreAttentionMetadataBuilder",
+        *,
+        causal: bool = True,
     ) -> int:
         """Compile every attention variant the builder's bucketer enumerates.
 
@@ -1437,7 +1439,7 @@ class SpyreAttentionImpl(AttentionImpl[SpyreAttentionMetadata]):
             len(decode_variants),
         )
         try:
-            recorded = self._record_all(variants, layer, kv_cache, builder, num_pages)
+            recorded = self._record_all(variants, layer, kv_cache, builder, num_pages, causal)
             recorded_decode = self._record_batched_all(
                 decode_variants, layer, kv_cache, builder, num_pages
             )
@@ -1469,6 +1471,7 @@ class SpyreAttentionImpl(AttentionImpl[SpyreAttentionMetadata]):
         kv_cache: SpyrePagedKVCache,
         builder: "SpyreAttentionMetadataBuilder",
         num_pages: int,
+        causal: bool,
     ) -> int:
         recorded: set[SpyreAttnBucket] = set()
         for i, bucket in enumerate(variants, start=1):
@@ -1478,7 +1481,9 @@ class SpyreAttentionImpl(AttentionImpl[SpyreAttentionMetadata]):
                 continue
             t0 = time.time()
             try:
-                realized = self._record_one(bucket, layer, kv_cache, builder, recorded)
+                realized = self._record_one(
+                    bucket, layer, kv_cache, builder, recorded, causal=causal
+                )
             except Exception:
                 logger.warning(
                     "Attention variant %s failed to record; it will compile on first use instead.",
@@ -1505,11 +1510,11 @@ class SpyreAttentionImpl(AttentionImpl[SpyreAttentionMetadata]):
         kv_cache: SpyrePagedKVCache,
         builder: "SpyreAttentionMetadataBuilder",
         recorded: "set[SpyreAttnBucket]",
+        *,
+        causal: bool = True,
     ) -> "SpyreAttnBucket | None":
         """Trace the kernel ``bucket`` needs; None if ``build()`` realized one already traced."""
-        attn_metadata = builder.build_for_variant(
-            bucket, causal=bool(getattr(layer, "spyre_causal", True))
-        )
+        attn_metadata = builder.build_for_variant(bucket, causal=causal)
         assert attn_metadata.attention_mask_stacks is not None
         realized = SpyreAttnBucket(
             num_blocks=int(attn_metadata.attention_mask_stacks[0].shape[0]),

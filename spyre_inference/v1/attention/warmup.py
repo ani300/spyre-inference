@@ -32,6 +32,8 @@ def record_attention_graphs(
     static_ctx: dict[str, Any],
     kv_caches: dict[str, SpyrePagedKVCache],
     builders: dict[str, SpyreAttentionMetadataBuilder],
+    *,
+    causal_by_layer: dict[str, bool],
 ) -> int:
     """Pre-compile every Spyre attention layer's kernels; returns the graph count."""
     # The kernels are module-level torch.compile objects: a layer matching an already
@@ -53,12 +55,13 @@ def record_attention_graphs(
             f"Layer {layer_name} has a Spyre attention impl and a KV cache but no "
             "Spyre metadata builder; initialize_attn_backend() must run first."
         )
-        key = (id(builder), impl.graph_key(), bool(getattr(layer, "spyre_causal", True)))
+        causal = causal_by_layer[layer_name]
+        key = (id(builder), impl.graph_key(), causal)
         if key in recorded:
             num_skipped += 1
             continue
         logger.info("Recording attention graphs for layer %s...", layer_name)
-        total += impl.record_graphs(layer, kv_cache, builder)
+        total += impl.record_graphs(layer, kv_cache, builder, causal=causal)
         recorded.add(key)
     logger.info(
         "Attention graph recording complete: %d graphs in %.3fs; %d layers share "

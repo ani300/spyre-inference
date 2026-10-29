@@ -15,24 +15,16 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 # SPDX-License-Identifier: Apache-2.0
 
-"""Host replacements for vLLM 0.32's Triton rejection kernels."""
+"""TEMPORARY / vendored: PyTorch ports of vLLM 0.32.0's rejection sampler kernels.
+
+Source: vllm/v1/sample/rejection_sampler.py: rejection_greedy_sample_kernel,
+rejection_random_sample_kernel, expand_kernel and sample_recovered_tokens_kernel.
+Remove when upstream CPU ops are loadable without vllm._C or supplied by csrc/ (#1417).
+"""
 
 import torch
 
 
-class _TorchKernel:
-    def __init__(self, function):
-        self.function = function
-
-    def __call__(self, *args, **kwargs):
-        return self.function(*args, **kwargs)
-
-    def register_warmup(self, **kwargs):
-        # Host operations have no Triton program to register for startup warmup.
-        pass
-
-
-@_TorchKernel
 def greedy_sample(
     output,
     cumulative,
@@ -43,6 +35,7 @@ def greedy_sample(
     max_spec_len,
     uniform,
     conditional_rates,
+    SYNTHETIC_MODE,
 ):
     start = 0
     for request, end in enumerate(cumulative.tolist()):
@@ -51,11 +44,11 @@ def greedy_sample(
                 draft = draft_ids[index]
                 accepted = (
                     draft >= 0 and uniform[index] < conditional_rates[position]
-                    if conditional_rates is not None
+                    if SYNTHETIC_MODE
                     else draft == target_ids[index]
                 )
                 output[request, position] = (
-                    draft if conditional_rates is not None and accepted else target_ids[index]
+                    draft if SYNTHETIC_MODE and accepted else target_ids[index]
                 )
                 if not accepted:
                     break
@@ -64,7 +57,6 @@ def greedy_sample(
         start = end
 
 
-@_TorchKernel
 def random_sample(
     output,
     cumulative,
@@ -76,7 +68,10 @@ def random_sample(
     uniform,
     is_greedy,
     max_spec_len,
+    vocab_size,
     conditional_rates,
+    NO_DRAFT_PROBS,
+    SYNTHETIC_MODE,
 ):
     start = 0
     for request, end in enumerate(cumulative.tolist()):
@@ -85,10 +80,10 @@ def random_sample(
                 draft = int(draft_ids[index])
                 if draft < 0:
                     accepted = False
-                elif conditional_rates is not None:
+                elif SYNTHETIC_MODE:
                     accepted = uniform[index] < conditional_rates[position]
                 else:
-                    q = 1.0 if draft_probs is None else draft_probs[index, draft]
+                    q = 1.0 if NO_DRAFT_PROBS else draft_probs[index, draft]
                     accepted = q > 0 and target_probs[index, draft] / q >= uniform[index]
                 output[request, position] = draft if accepted else recovered_ids[index]
                 if not accepted:
@@ -98,8 +93,7 @@ def random_sample(
         start = end
 
 
-@_TorchKernel
-def expand(output, values, cumulative, replace_from, replace_to):
+def expand(output, values, cumulative, replace_from, replace_to, MAX_NUM_TOKENS):
     start = 0
     for request, end in enumerate(cumulative.tolist()):
         value = values[request]
@@ -107,7 +101,6 @@ def expand(output, values, cumulative, replace_from, replace_to):
         start = end
 
 
-@_TorchKernel
 def recover(
     output,
     cumulative,
@@ -115,29 +108,35 @@ def recover(
     draft_probs,
     target_probs,
     inverse_noise,
-    *,
-    max_spec_len,
+    vocab_size,
+    BLOCK_SIZE,
+    NO_DRAFT_PROBS,
+    USE_FP64_GUMBEL,
 ):
-    start = 0
-    for request, end in enumerate(cumulative.tolist()):
-        if end > start:
-            if draft_probs is None:
-                residual = target_probs[start:end].clone()
+    counts = cumulative.diff(prepend=cumulative.new_zeros(1))
+    widths, group_sizes = counts.unique_consecutive(return_counts=True)
+    start = request = 0
+    # Group equal draft lengths to broadcast one noise row per request, avoiding
+    # a full [num_tokens, vocab_size] copy of the noise with repeat_interleave.
+    for width, group_size in zip(widths.tolist(), group_sizes.tolist(), strict=True):
+        end = start + width * group_size
+        if width:
+            target = target_probs[start:end].view(group_size, width, vocab_size)
+            noise = inverse_noise[request : request + group_size, None, :]
+            if NO_DRAFT_PROBS:
+                scores = (target * noise).view(-1, vocab_size)
                 ids = draft_ids[start:end].long()
-                valid = ids >= 0
-                rows = torch.arange(end - start)[valid]
-                residual[rows, ids[valid]] = 0
+                valid = (ids >= 0) & (ids < vocab_size)
+                rows = torch.arange(end - start, device=ids.device)[valid]
+                # Mask after multiplying to avoid a residual copy; preserve 0 * inf.
+                scores[rows, ids[valid]] = 0 * inverse_noise[request + rows // width, ids[valid]]
             else:
-                residual = (target_probs[start:end] - draft_probs[start:end]).clamp_min(0)
+                draft = draft_probs[start:end].view_as(target)
+                residual = (target - draft).clamp_min_(0)
+                scores = residual.to(torch.promote_types(residual.dtype, noise.dtype))
+                scores.mul_(noise)
+                scores = scores.view(-1, vocab_size)
             # torch.argmax chooses the first index on ties, including all-zero rows.
-            output[start:end] = (residual * inverse_noise[request]).argmax(dim=-1)
+            output[start:end] = scores.argmax(dim=-1)
         start = end
-
-
-def install_rejection_sampler_kernels() -> None:
-    from vllm.v1.sample import rejection_sampler
-
-    rejection_sampler._rejection_greedy_sample = greedy_sample
-    rejection_sampler._rejection_random_sample = random_sample
-    rejection_sampler._expand = expand
-    rejection_sampler._sample_recovered_tokens = recover
+        request += group_size

@@ -37,7 +37,7 @@ from __future__ import annotations
 import bisect
 import time
 from contextlib import AbstractContextManager, contextmanager, nullcontext
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 import numpy as np
 import torch
@@ -122,6 +122,12 @@ from spyre_inference.v1.worker.spyre_shape_bucketer import (
 )
 
 logger = init_logger(__name__)
+
+
+class _DraftAttentionModel(Protocol):
+    def get_draft_kv_cache_layer_names(self) -> list[str]: ...
+
+    def get_draft_attn_causal(self) -> list[bool]: ...
 
 
 # Pure-PyTorch replacement for torch.ops._C.compute_slot_mapping_kernel_impl
@@ -570,13 +576,6 @@ class TorchSpyreModelRunner(GPUModelRunner):
         # Spyre doesn't support all dtypes (int32, bool) natively.
         # _make_buffer (overridden below) already places .gpu on Spyre
         # via self._spyre_device regardless of self.device.
-        if vllm_config.speculative_config is not None:
-            from spyre_inference.v1.spec_decode.rejection_sampler import (
-                install_rejection_sampler_kernels,
-            )
-
-            install_rejection_sampler_kernels()
-
         with _torch_cuda_wrapper():
             super().__init__(vllm_config, torch.device("cpu"))
         # Patch upstream's Sampler in place, so every holder of it (e.g. the
@@ -632,11 +631,7 @@ class TorchSpyreModelRunner(GPUModelRunner):
         if self.lora_config:
             raise NotImplementedError("LoRA adapters are not yet implemented and tested for Spyre.")
 
-        if (
-            hasattr(self, "drafter")
-            and self.speculative_config is not None
-            and self.speculative_config.method not in ("ngram", "custom_class")
-        ):
+        if hasattr(self, "drafter"):
             raise NotImplementedError(
                 "Models with a drafter model are not yet implemented and tested for Spyre."
             )
@@ -689,12 +684,17 @@ class TorchSpyreModelRunner(GPUModelRunner):
         )
 
     def _copy_draft_token_ids_to_cpu(self, scheduler_output, zeros_only=False):
-        # All supported proposers use host bookkeeping. In particular, the
-        # near-context-limit zero-draft path must not access CUDA streams.
+        assert not self.use_async_scheduling, (
+            "async scheduling is unsupported for Spyre draft-token bookkeeping"
+        )
+        # The near-context-limit zero-draft path must not access CUDA streams.
         if isinstance(self._draft_token_ids, torch.Tensor):
             self.prev_num_spec_tokens = self._draft_token_ids.shape[1]
-            ids = convert(self._draft_token_ids, device="cpu")
-            self._draft_token_ids = torch.zeros_like(ids).tolist() if zeros_only else ids.tolist()
+            self._draft_token_ids = (
+                [[0] * self.prev_num_spec_tokens for _ in range(len(self._draft_token_ids))]
+                if zeros_only
+                else convert(self._draft_token_ids, device="cpu").tolist()
+            )
         self._draft_token_req_ids = self.input_batch.req_ids.copy()
 
     def _resolve_kv_scales(self) -> bool:
@@ -922,6 +922,8 @@ class TorchSpyreModelRunner(GPUModelRunner):
                 hidden_states, last_hidden_states = self._dummy_run(size)
                 self._warmup_input_embedding(size)
                 if widest_hidden_states is None:
+                    # Verification projects every draft position plus the bonus row;
+                    # last_hidden_states holds only one sampled row per request.
                     widest_hidden_states = (
                         hidden_states if self.num_spec_tokens else last_hidden_states
                     )
@@ -1076,11 +1078,28 @@ class TorchSpyreModelRunner(GPUModelRunner):
             "_spyre_kv_caches is empty: initialize_kv_cache_tensors() must run first."
         )
 
+        causal_by_layer = {
+            name: True
+            for groups in self.attn_groups
+            for group in groups
+            for name in group.layer_names
+        }
+        if self.speculative_config is not None:
+            draft_model = cast(_DraftAttentionModel, self.drafter.model)
+            # vLLM resolves the draft's per-layer causality from its model config.
+            causal_by_layer.update(
+                zip(
+                    draft_model.get_draft_kv_cache_layer_names(),
+                    draft_model.get_draft_attn_causal(),
+                    strict=True,
+                )
+            )
         with _set_spyre_compilation_settings(self.vllm_config):
             record_attention_graphs(
                 self.compilation_config.static_forward_context,
                 self._spyre_kv_caches,
                 self._attn_metadata_builders(),
+                causal_by_layer=causal_by_layer,
             )
 
     def _attn_metadata_builders(self) -> dict[str, SpyreAttentionMetadataBuilder]:
