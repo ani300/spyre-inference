@@ -714,6 +714,38 @@ class TorchSpyreModelRunner(GPUModelRunner):
             keep_aux_hidden_states_on_device=self.use_aux_hidden_state_outputs,
         )
 
+    def _sample(self, logits, spec_decode_metadata):
+        # Unfinished prefills discard their samples. CPU generators have no
+        # Philox offset to rewind, so preserve their full state across all draws.
+        discard = self.discard_request_mask.np[: self.input_batch.num_reqs]
+        states = [
+            (generator, generator.get_state())
+            for i, generator in self.input_batch.generators.items()
+            if discard[i]
+        ]
+        try:
+            return super()._sample(logits, spec_decode_metadata)
+        finally:
+            for generator, state in states:
+                generator.set_state(state)
+
+    def _bookkeeping_sync(
+        self, scheduler_output, sampler_output, logits, hidden_states, num_scheduled_tokens
+    ):
+        # _sample already restored discarded CPU generators. Hide them from
+        # upstream's CUDA-offset rewind without changing sampling_metadata's alias.
+        generators = self.input_batch.generators
+        discard = self.discard_request_mask.np[: self.input_batch.num_reqs]
+        self.input_batch.generators = {
+            i: generator for i, generator in generators.items() if not discard[i]
+        }
+        try:
+            return super()._bookkeeping_sync(
+                scheduler_output, sampler_output, logits, hidden_states, num_scheduled_tokens
+            )
+        finally:
+            self.input_batch.generators = generators
+
     def _input_fits_in_drafter(self, common_attn_metadata):
         if self.speculative_config is not None and self.speculative_config.use_dflash():
             # Commit each request's context, then decide which individual drafts fit.
