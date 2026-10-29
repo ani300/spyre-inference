@@ -2,7 +2,7 @@
 
 Model: [RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic](https://huggingface.co/RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic), revision `ed35d7abe5d940da41b4ff06eb482feb0be8cb44`. Assessment: 2026-10-29, TP1, text backbone.
 
-**The integrated B path generates text with FP8 expert storage and FP8 expert matmuls.** The single- and four-sentence FP16 KV-cache cases passed. The default tiled attention path fails to compile an FP8 cache read at Gemma’s head geometry; the existing Python attention page loop passes all eight focused Gemma cache checks. Full-model FP8-cache generation passes for both one and four sentences with that workaround. All 30 layers load, and the default compiled transformer blocks remain enabled.
+**The integrated B path generates text with FP8 expert storage and FP8 expert matmuls.** The single- and four-sentence FP16 KV-cache cases passed. The default tiled attention path fails to compile an FP8 cache read at Gemma’s head geometry; the existing Python attention page loop passes all eight focused Gemma cache checks. Full-model FP8-cache generation passes for both one and four sentences with that workaround. All 30 layers load, and the default compiled transformer blocks remain enabled. The longer AIOps four-prompt run also completes with both cache formats, but all FP8 outputs diverge from FP16 at the first token and some are empty/malformed; long-input answer quality remains unresolved.
 
 ## What changed
 
@@ -36,6 +36,7 @@ The MoE sees only hidden states and router logits.
 | Full model, FP8 KV, one sentence, unrolled attention | Generation passed; same 16 token IDs as FP16 for this prompt | [JSON](results/e2e-unrolled/fp8-b1.json) |
 | Full model, FP8 KV, four sentences, unrolled attention | Generation passed, 16 output tokens per sentence | [JSON](results/e2e-unrolled/fp8-b4.json) |
 | AIOps trace, FP16 KV, four prompts (1165 / 1329 / 1488 / 1490 input tokens), unrolled attention | Generation passed, 16 output tokens per prompt; 621 s startup + 2012 s processing/generation, including compilation | [sanitized JSON](results/e2e-aiops/fp16-b4.summary.json) |
+| AIOps trace, FP8 KV, same four prompts, unrolled attention | Execution passed, 16 output tokens per prompt; 596 s startup + 2128 s processing/generation, including compilation; output-quality concern below | [sanitized JSON](results/e2e-aiops/fp8-b4.summary.json), [comparison](results/e2e-aiops/comparison.summary.json) |
 | Full model, FP8 KV, one sentence, default attention | Fails in FP8-page dequantization during attention prefill compilation | [log](results/e2e-final/fp8-b1.log) |
 | Gemma FP8 cache, unrolled attention, both head geometries × prefill/decode × one/four sequences | 8 numerical passes | [probe](results/e2e/attention-unrolled-probe.log), [remaining cases](results/e2e/attention-unrolled-matrix.log) |
 | MoE configuration and opaque dispatch selection | 18 passed | [log](results/regression-final/moe-config.log) |
@@ -47,7 +48,9 @@ The MoE sees only hidden states and router logits.
 
 The layer reference dequantizes the original checkpoint weights to FP32 and independently validates routing, including near ties. The 10% global and per-row norm thresholds were declared before these runs. These layer checks are not an end-to-end quality benchmark. Persistent paths use one whole-expert representation; the layer runner’s historical `chunks` field records the requested CLI value, while `effective_chunks` records the representation used by new runs (always 1 for persistent paths).
 
-The AIOps FP16-cache run completed with all four original prompts untruncated and a fixed 16-token output budget. This validates longer-input engine execution, not task accuracy or valid structured output. Its timings include first-use compilation and are not steady-state throughput measurements. As of 2026-10-29 20:17 UTC, the matching FP8-cache case is still in warmup, with no failure recorded; no AIOps FP8 pass is claimed yet.
+Both AIOps cache cases completed with all four original prompts untruncated and a fixed 16-token output budget; FP8 finished at 2026-10-29 20:53 UTC. This validates longer-input engine execution, not task accuracy or valid structured output. Timings include first-use compilation and are not steady-state throughput measurements.
+
+**AIOps output quality is unresolved.** With identical prompts and greedy sampling (`temperature=0`), all four FP8-cache continuations differ from FP16 starting at the first generated token. Manual inspection found an empty object and a response dominated by separators/role markers among the FP8 outputs; others contain an apology or repeat the request. FP16 outputs are also truncated fragments, so they are not a validated task reference. Forced continuation after EOS can explain trailing control markers, but not divergence at the first token. The [sanitized comparison](results/e2e-aiops/comparison.summary.json) records token counts and common-prefix lengths. These observations warrant longer-context numerical/quality investigation; they do not identify a specific cache or MoE defect.
 
 Scoped Ruff and runner type checks pass. The [torch-spyre pre-commit run](results/e2e/torch-spyre-precommit-review.log) passes its other checks but retains two existing Python 3.11 mypy errors for `warnings.warn(skip_file_prefixes=...)` at `model_utils.py:216`.
 
@@ -116,7 +119,7 @@ The interactive [HTML report](report.html) is generated from this file by `pytho
 
 ## Remaining limitations
 
-The default tiled FP8-cache prefill fails with `no mechanism to resolve stick incompatibility` while converting a gathered `[1,8,128,256]` FP8 page into the DL16 matmul layout. `--attention-page-loop unrolled` selects the existing `SPYRE_ATTN_FOR_EACH_TILE=0` attention implementation; expert `for_each_tile` stays enabled. The focused tests validate both Gemma head geometries and cache writes against the existing CPU reference. The AIOps FP16-cache run covers prompts up to 1490 tokens; matching longer-input FP8-cache validation is still running.
+The default tiled FP8-cache prefill fails with `no mechanism to resolve stick incompatibility` while converting a gathered `[1,8,128,256]` FP8 page into the DL16 matmul layout. `--attention-page-loop unrolled` selects the existing `SPYRE_ATTN_FOR_EACH_TILE=0` attention implementation; expert `for_each_tile` stays enabled. The focused tests validate both Gemma head geometries and cache writes against the existing CPU reference. Both AIOps cache runs execute with prompts up to 1490 tokens, but the FP8 output divergence described above leaves longer-input numerical fidelity and task accuracy unresolved.
 
 TP1, Gemma's GELU/full-softmax routing, 128 experts and top-k 8 only. The bridge rejects unsupported recipes and parallel configurations. The model's vision/audio towers are outside this experiment.
 

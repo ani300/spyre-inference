@@ -1,0 +1,49 @@
+{
+  "dataset_sha256": "468cf059f2ec3b14108efc09baffabf5c5a440172a25660673d5a8fa029d0637",
+  "prompt_lengths": [
+    1165,
+    1329,
+    1488,
+    1490
+  ],
+  "temperature": 0.0,
+  "ignore_eos": true,
+  "max_tokens": 16,
+  "outputs": [
+    {
+      "index": 0,
+      "same_prompt": true,
+      "fp16_token_count": 16,
+      "fp8_token_count": 16,
+      "identical_token_ids": false,
+      "common_prefix_tokens": 0
+    },
+    {
+      "index": 1,
+      "same_prompt": true,
+      "fp16_token_count": 16,
+      "fp8_token_count": 16,
+      "identical_token_ids": false,
+      "common_prefix_tokens": 0
+    },
+    {
+      "index": 2,
+      "same_prompt": true,
+      "fp16_token_count": 16,
+      "fp8_token_count": 16,
+      "identical_token_ids": false,
+      "common_prefix_tokens": 0
+    },
+    {
+      "index": 3,
+      "same_prompt": true,
+      "fp16_token_count": 16,
+      "fp8_token_count": 16,
+      "identical_token_ids": false,
+      "common_prefix_tokens": 0
+    }
+  ],
+  "interpretation": "Execution succeeds for both cache formats. All four deterministic FP8 continuations diverge from FP16 at the first token. This is a quality concern, not an established diagnosis of a cache or MoE bug. The short forced output budget and lack of an independent task reference limit quality conclusions.",
+  "quality_benchmark_performed": false,
+  "steady_state_performance_measured": false
+}
