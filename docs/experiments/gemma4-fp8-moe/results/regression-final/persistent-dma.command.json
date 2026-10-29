@@ -1,0 +1,17 @@
+{
+  "cwd": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8",
+  "command": [
+    "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/bin/python",
+    "examples/experimental/run_gemma4_fp8_matrix.py",
+    "--path",
+    "persistent-dma",
+    "--case",
+    "persistent-dma-b1-q1",
+    "--case",
+    "persistent-dma-b4-q1",
+    "--case",
+    "persistent-dma-b4-q128",
+    "--output-dir",
+    "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/docs/experiments/gemma4-fp8-moe/results/regression-final/layers"
+  ]
+}

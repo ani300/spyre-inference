@@ -71,6 +71,9 @@ def main():
         "output": str(args.output),
         "passed": False,
         "versions": {p: version(p) for p in ("torch", "torch-spyre", "vllm")},
+        "effective_chunks": (
+            1 if args.path.startswith(("persistent", "rank3")) else args.chunks
+        ),
         "dispatch": "on-device routing, token-expert expansion and reduction",
         "weight_storage": "FP8",
         "matmul": "spyre.scaled_bmm FP8 x FP8 -> DL16",

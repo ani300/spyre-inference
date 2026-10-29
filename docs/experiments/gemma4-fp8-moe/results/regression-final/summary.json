@@ -1,0 +1,27 @@
+[
+  {
+    "case": "e2e-unrolled",
+    "returncode": 0,
+    "seconds": 1273.845736307092
+  },
+  {
+    "case": "dense-fp8",
+    "returncode": 0,
+    "seconds": 70.68624632200226
+  },
+  {
+    "case": "loader-fp8",
+    "returncode": 0,
+    "seconds": 60.743720659054816
+  },
+  {
+    "case": "moe-config",
+    "returncode": 0,
+    "seconds": 26.258542843163013
+  },
+  {
+    "case": "persistent-dma",
+    "returncode": 0,
+    "seconds": 168.8863978208974
+  }
+]

@@ -1,0 +1,6 @@
+Running persistent-dma-b1-q1
+{'case': 'persistent-dma-b1-q1', 'returncode': 0, 'passed': True, 'stage': None, 'relative_l2': 0.02568778768181801}
+Running persistent-dma-b4-q1
+{'case': 'persistent-dma-b4-q1', 'returncode': 0, 'passed': True, 'stage': None, 'relative_l2': 0.03632865101099014}
+Running persistent-dma-b4-q128
+{'case': 'persistent-dma-b4-q128', 'returncode': 0, 'passed': True, 'stage': None, 'relative_l2': 0.03974999487400055}

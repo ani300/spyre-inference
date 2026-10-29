@@ -1,0 +1,23 @@
+[
+  {
+    "case": "persistent-dma-b1-q1",
+    "returncode": 0,
+    "passed": true,
+    "stage": null,
+    "relative_l2": 0.02568778768181801
+  },
+  {
+    "case": "persistent-dma-b4-q1",
+    "returncode": 0,
+    "passed": true,
+    "stage": null,
+    "relative_l2": 0.03632865101099014
+  },
+  {
+    "case": "persistent-dma-b4-q128",
+    "returncode": 0,
+    "passed": true,
+    "stage": null,
+    "relative_l2": 0.03974999487400055
+  }
+]

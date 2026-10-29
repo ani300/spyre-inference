@@ -101,4 +101,3 @@ Suggestion...............................................................Passed
 - duration: 0s
 
 To bypass all the pre-commit hooks, add --no-verify to git commit. To skip a specific hook, prefix the commit command with SKIP=<hook-id>.
-

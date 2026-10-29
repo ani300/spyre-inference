@@ -41,10 +41,10 @@ The MoE sees only hidden states and router logits.
 | CPU dispatch, padding, chunk equations and reduction | 8 passed | [log](results/e2e/grouped-cpu-tests.log) |
 | Full FP8 loader suite, including rank-2/3/4 DMA, source views/offsets and grouped matmul | 31 passed | [log](results/regression-final/loader-fp8.log) |
 | Full dense FP8 linear suite, including Gemma K=2112 padding at 1/4/128 rows | 39 passed | [log](results/regression-final/dense-fp8.log) |
-| Real layer 0, 128 experts, 128 tokens, direct DMA + persistent FP8 | Pass: 3.90% global relative L2, 5.30% worst row | [JSON](results/e2e/persistent-dma-b1-q128.json), [log](results/e2e/persistent-dma-b1-q128.log) |
+| Real layer 0, 128 experts, 1 / 4 / 128 / 512 tokens, direct DMA + persistent FP8 | All pass; global relative L2 2.57% / 3.63% / 3.90% / 3.97%; worst row ≤7.85% | [1/4/512 JSON summary](results/regression-final/layers/summary.json), [128 JSON](results/e2e/persistent-dma-b1-q128.json) |
 | Full model, first attempt | All experts load; shared dense MLP's unaligned K loses QFP8WT during compilation | [diagnostic log](results/e2e/fp16-b1-attempt2.log) |
 
-The layer reference dequantizes the original checkpoint weights to FP32 and independently validates routing, including near ties. The 10% global and per-row norm thresholds were declared before these runs. These layer checks are not an end-to-end quality benchmark.
+The layer reference dequantizes the original checkpoint weights to FP32 and independently validates routing, including near ties. The 10% global and per-row norm thresholds were declared before these runs. These layer checks are not an end-to-end quality benchmark. Persistent paths use one whole-expert representation; the layer runner’s historical `chunks` field records the requested CLI value, while `effective_chunks` records the representation used by new runs (always 1 for persistent paths).
 
 Scoped Ruff and runner type checks pass. The [torch-spyre pre-commit run](results/e2e/torch-spyre-precommit-review.log) passes its other checks but retains two existing Python 3.11 mypy errors for `warnings.warn(skip_file_prefixes=...)` at `model_utils.py:216`.
 

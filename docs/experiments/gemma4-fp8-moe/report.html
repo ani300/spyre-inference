@@ -95,9 +95,9 @@ The MoE sees only hidden states and router logits.
 <td><a href="results/regression-final/dense-fp8.log">log</a></td>
 </tr>
 <tr>
-<td>Real layer 0, 128 experts, 128 tokens, direct DMA + persistent FP8</td>
-<td>Pass: 3.90% global relative L2, 5.30% worst row</td>
-<td><a href="results/e2e/persistent-dma-b1-q128.json">JSON</a>, <a href="results/e2e/persistent-dma-b1-q128.log">log</a></td>
+<td>Real layer 0, 128 experts, 1 / 4 / 128 / 512 tokens, direct DMA + persistent FP8</td>
+<td>All pass; global relative L2 2.57% / 3.63% / 3.90% / 3.97%; worst row ≤7.85%</td>
+<td><a href="results/regression-final/layers/summary.json">1/4/512 JSON summary</a>, <a href="results/e2e/persistent-dma-b1-q128.json">128 JSON</a></td>
 </tr>
 <tr>
 <td>Full model, first attempt</td>
@@ -106,7 +106,7 @@ The MoE sees only hidden states and router logits.
 </tr>
 </tbody>
 </table>
-<p>The layer reference dequantizes the original checkpoint weights to FP32 and independently validates routing, including near ties. The 10% global and per-row norm thresholds were declared before these runs. These layer checks are not an end-to-end quality benchmark.</p>
+<p>The layer reference dequantizes the original checkpoint weights to FP32 and independently validates routing, including near ties. The 10% global and per-row norm thresholds were declared before these runs. These layer checks are not an end-to-end quality benchmark. Persistent paths use one whole-expert representation; the layer runner’s historical <code>chunks</code> field records the requested CLI value, while <code>effective_chunks</code> records the representation used by new runs (always 1 for persistent paths).</p>
 <p>Scoped Ruff and runner type checks pass. The <a href="results/e2e/torch-spyre-precommit-review.log">torch-spyre pre-commit run</a> passes its other checks but retains two existing Python 3.11 mypy errors for <code>warnings.warn(skip_file_prefixes=...)</code> at <code>model_utils.py:216</code>.</p>
 <h2>Why the earlier packing issue was avoidable</h2>
 <p>The earlier prototype uploaded FP8 code values through temporary DL16 tensors and called <code>qfp8wt</code> on device. A whole pool exceeded that conversion kernel's per-core address span; four smaller pools worked. That was a limitation of the prototype's conversion route, not a requirement of checkpoint loading. The extended loader now packs the checkpoint bytes directly, exactly where FP8 linear weights are packed. The earlier claim that full-pool device packing blocked engine integration was too broad.</p>
