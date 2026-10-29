@@ -36,6 +36,7 @@ from collections.abc import Sequence
 from typing import cast
 
 import torch
+import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 from vllm.logger import init_logger
 from vllm.model_executor.kernels.linear import register_linear_kernel
@@ -172,6 +173,11 @@ class SpyreFp8LinearKernel(CompileOutermost, FP8ScaledMMLinearKernel):
         scale = _normalize_weight_scale(weight, weight_scale)
         # CPU float8 cannot H2D into qfp8wt. DMA it here, so model.to("spyre") skips it.
         if weight.device.type != "spyre":
+            # Compiler-inserted K padding loses QFP8WT. Pad checkpoint bytes at
+            # load time instead (Gemma's shared MLP has K=2112, padded to 2176).
+            pad_k = -weight.shape[0] % 128
+            if pad_k:
+                weight = F.pad(weight.view(torch.uint8), (0, 0, 0, pad_k)).view(torch.float8_e4m3fn)
             weight = _dma_checkpoint_qfp8wt(weight)
         else:
             _require_qfp8wt(weight)
@@ -200,6 +206,9 @@ class SpyreFp8LinearKernel(CompileOutermost, FP8ScaledMMLinearKernel):
         x2d = x.reshape(-1, x.shape[-1]) if x.dim() > 2 else x
         weight = cast(torch.Tensor, layer.weight)
         weight_scale = cast(torch.Tensor, layer.weight_scale)
+        pad_k = weight.shape[0] - x2d.shape[-1]
+        if pad_k:
+            x2d = F.pad(x2d, (0, pad_k))
         if self._per_token_act:
             scale_a = torch.ops.spyre.quantscalepertokenfp8(
                 x2d,  # ty: ignore[invalid-argument-type]

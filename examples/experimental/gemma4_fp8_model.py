@@ -15,13 +15,14 @@
 """Gemma 4 FP8 checkpoint smoke test; errors are recorded and exit nonzero."""
 
 import argparse
+import hashlib
 import json
 import os
 import time
 import traceback
 from importlib.metadata import version
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 
 def main():
@@ -29,11 +30,29 @@ def main():
     parser.add_argument("--batch", type=int, choices=[1, 4], default=1)
     parser.add_argument("--kv-cache", choices=["fp16", "fp8"], default="fp16")
     parser.add_argument("--max-tokens", type=int, default=16)
+    parser.add_argument("--max-model-len", type=int, default=512)
+    parser.add_argument("--dataset", type=Path, help="Spyre benchmark JSONL input trace")
+    parser.add_argument("--dataset-offset", type=int, default=0)
+    parser.add_argument(
+        "--eager-blocks",
+        action="store_true",
+        help="Keep block orchestration eager; FP8 kernels still compile",
+    )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     os.environ.setdefault("HF_HOME", "/mnt/models/hf_cache")
-    result = {**vars(args), "output": str(args.output), "passed": False}
+    os.environ.setdefault("SPYRE_NUM_CPUS", "8")
+    result = {
+        **vars(args),
+        "output": str(args.output),
+        "dataset": str(args.dataset) if args.dataset else None,
+        "passed": False,
+    }
     result["versions"] = {p: version(p) for p in ("torch", "torch-spyre", "vllm")}
+    result["environment"] = {
+        key: os.environ.get(key)
+        for key in ("SPYRE_ATTN_RECORD", "SPYRE_KERNEL_CACHE", "SPYRE_NUM_CPUS", "PYTHONPATH")
+    }
     engine = None
     stage = "startup"
     started = time.monotonic()
@@ -50,13 +69,13 @@ def main():
             tokenizer_revision=revision,
             dtype="float16",
             hf_overrides=GEMMA4_TEXT_BACKBONE_OVERRIDE,
-            max_model_len=512,
+            max_model_len=args.max_model_len,
             max_num_seqs=args.batch,
             max_num_batched_tokens=128,
-            compilation_config={"compile_sizes": sorted({1, args.batch, 128})},
+            compilation_config={"compile_sizes": [1, 128] if args.batch == 1 else [1, 2, 4, 128]},
             kv_cache_dtype="auto" if args.kv_cache == "fp16" else "fp8",
-            num_gpu_blocks_override=1 + args.batch * 4,
-            enforce_eager=False,
+            num_gpu_blocks_override=1 + args.batch * ((args.max_model_len + 127) // 128),
+            enforce_eager=args.eager_blocks,
         )
         result["settings"] = settings
         engine = LLM(**settings)
@@ -74,9 +93,21 @@ def main():
                 [{"role": "user", "content": p}],
                 tokenize=False,
                 add_generation_prompt=True,
+                enable_thinking=False,
             )
             for p in prompts
         ]
+        if args.dataset:
+            rows = [
+                json.loads(line) for line in args.dataset.read_text().splitlines() if line.strip()
+            ]
+            rows = rows[args.dataset_offset : args.dataset_offset + args.batch]
+            assert len(rows) == args.batch, "Not enough dataset rows"
+            formatted = [row["prompt"] for row in rows]
+            prompts = formatted
+            result["dataset_sha256"] = hashlib.sha256(args.dataset.read_bytes()).hexdigest()
+        result["prompt_lengths"] = [len(tokenizer.encode(cast(str, p))) for p in formatted]
+        assert max(result["prompt_lengths"]) + args.max_tokens <= args.max_model_len
         started = time.monotonic()
         outputs = engine.generate(
             formatted,

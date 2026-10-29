@@ -39,7 +39,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--path",
-        choices=["native", "staged", "persistent", "persistent-sharded", "rank3-dma"],
+        choices=[
+            "native",
+            "staged",
+            "persistent",
+            "persistent-sharded",
+            "persistent-dma",
+            "rank3-dma",
+        ],
         required=True,
     )
     parser.add_argument("--batch", type=int, choices=[1, 4], default=1)
@@ -108,6 +115,13 @@ def main():
 
             pool = _dma_to_spyre_fp8_kernel(host["gate"].transpose(-1, -2).contiguous())
             result["layout"] = str(pool.device_tensor_layout())
+            torch.testing.assert_close(
+                pool.cpu().view(torch.uint8),
+                host["gate"].transpose(-1, -2).view(torch.uint8),
+                rtol=0,
+                atol=0,
+            )
+            result["byte_exact"] = True
         else:
             torch.manual_seed(813)
             tokens = args.batch * args.query_len
@@ -144,9 +158,14 @@ def main():
             else:
                 for proj in ("gate", "up", "down"):
                     progress(f"load_{proj}_pool")
-                    pools[proj] = load_expert_pool(
-                        prepared[proj], path="staged" if args.path == "staged" else "native"
-                    )
+                    if args.path == "persistent-dma":
+                        from torch_spyre.model_utils import _dma_to_spyre_fp8_kernel
+
+                        pools[proj] = _dma_to_spyre_fp8_kernel(prepared[proj].transpose(-1, -2))
+                    else:
+                        pools[proj] = load_expert_pool(
+                            prepared[proj], path="staged" if args.path == "staged" else "native"
+                        )
                     assert pools[proj].dtype == torch.float8_e4m3fn
                     layouts[proj] = str(pools[proj].device_tensor_layout())
                 result["pool_logical_bytes"] = sum(w.numel() for w in pools.values())
@@ -161,7 +180,7 @@ def main():
                 device_weights[t] = weights.cpu().float()[0]
 
             def observe_route(route):
-                weights, ids = route.cpu().float().squeeze(-1).topk(8, -1)
+                weights, ids = route.cpu().float().squeeze(-1)[:tokens].topk(8, -1)
                 selected_ids[:] = ids
                 device_weights[:] = weights
 
@@ -202,20 +221,24 @@ def main():
             else:
                 from spyre_inference.experimental.fp8_native_moe import native_moe
 
-                actual = (
-                    native_moe(
-                        x.to("spyre"),
-                        logits.to("spyre"),
-                        pools,
-                        scale_pools,
-                        path=args.path,
-                        chunks=args.chunks,
-                        progress=progress,
-                        route_observer=observe_route,
-                    )
-                    .cpu()
-                    .float()
+                xd, ld = x.to("spyre"), logits.to("spyre")
+                if args.path == "persistent-dma":
+                    from spyre_inference.experimental.fp8_moe_method import pad_rows, trim_rows
+
+                    xd, ld = pad_rows(xd, ld)
+                value = native_moe(
+                    xd,
+                    ld,
+                    pools,
+                    scale_pools,
+                    path=args.path,
+                    chunks=args.chunks,
+                    progress=progress,
+                    route_observer=observe_route,
                 )
+                if args.path == "persistent-dma":
+                    value = trim_rows(value, tokens)
+                actual = value.cpu().float()
                 if args.path == "native":
                     selected_ids[:] = ids
                     ref_probs = probs.gather(1, ids)

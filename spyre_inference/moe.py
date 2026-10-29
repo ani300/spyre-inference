@@ -156,7 +156,17 @@ def configure_spyre_moe_layer(layer: _RoutedExperts, recipe: SpyreMoERecipe) -> 
     moe = layer.moe_config
     _validate_recipe(layer, recipe)
     if not isinstance(layer.quant_method, UnquantizedFusedMoEMethod):
-        raise NotImplementedError("Spyre MoE backend does not support quantized experts.")
+        from spyre_inference.experimental.fp8_moe_method import (
+            CompressedTensorsW8A8Fp8MoEMethod,
+            SpyreFp8MoEMethod,
+        )
+
+        if not isinstance(layer.quant_method, CompressedTensorsW8A8Fp8MoEMethod):
+            raise NotImplementedError("Spyre MoE backend does not support these quantized experts.")
+        old_method = layer.quant_method
+        layer._replace_quant_method(
+            SpyreFp8MoEMethod(old_method.weight_quant, old_method.input_quant, moe)
+        )
     if moe.is_lora_enabled:
         raise NotImplementedError("Spyre MoE backend does not support LoRA experts.")
     if moe.has_bias:
@@ -727,6 +737,8 @@ class SpyreMoERunner(MoERunner):
 
     def _entry_for(self, tokens: int) -> Callable:
         shared = self.shared_experts is not None
+        if getattr(self.routed_experts.quant_method, "spyre_fp8_experts", False):
+            return torch.ops.vllm.moe_forward_shared if shared else torch.ops.vllm.moe_forward
         if tokens % self._spyre_stick == 0:
             return _moe_forward_shared if shared else _moe_forward
         return torch.ops.vllm.moe_forward_shared if shared else torch.ops.vllm.moe_forward

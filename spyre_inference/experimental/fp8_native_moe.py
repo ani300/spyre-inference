@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Proposed native FP8 versions of DL16 gathered decode and persistent prefill.
+"""Experimental FP8 versions of DL16 gathered and persistent expert kernels.
 
-These are compiler probes, not registered production MoE backends.
+The engine bridge uses the persistent path. Gathered and sharded paths remain
+standalone probes for compiler bring-up and comparison.
 """
 
 import torch

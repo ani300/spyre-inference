@@ -25,7 +25,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--path",
-        choices=["staged", "native", "persistent", "persistent-sharded", "rank3-dma", "all"],
+        choices=[
+            "staged",
+            "native",
+            "persistent",
+            "persistent-sharded",
+            "persistent-dma",
+            "rank3-dma",
+            "all",
+        ],
         default="all",
     )
     parser.add_argument("--experts", type=int, choices=[32, 128], default=128)
@@ -34,7 +42,7 @@ def main():
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
     paths = (
-        ("staged", "native", "persistent", "persistent-sharded", "rank3-dma")
+        ("staged", "native", "persistent", "persistent-sharded", "persistent-dma", "rank3-dma")
         if args.path == "all"
         else (args.path,)
     )

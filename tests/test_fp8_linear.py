@@ -154,7 +154,8 @@ class TestSpyreFp8LinearKernel:
 
         assert layer.weight.dtype == torch.float8_e4m3fn
         assert layer.weight.device.type == "spyre"
-        assert layer.weight.shape == (64, 128)
+        assert layer.weight.shape == (128, 128)
+        assert torch.count_nonzero(layer.weight.cpu()[64:].float()) == 0
         self._assert_qfp8wt(layer.weight)
         assert layer.weight_scale.dtype == torch.float16
         assert layer.weight_scale.device.type == "cpu"
@@ -260,6 +261,33 @@ class TestSpyreFp8LinearKernel:
         from torch_spyre._C import ElementArrangement
 
         assert layout.element_arrangement == ElementArrangement.QFP8WT, layout.element_arrangement
+
+    @pytest.mark.parametrize("num_tokens", [1, 4, 128])
+    def test_partial_k_stick_is_padded_before_upload(self, num_tokens):
+        """Gemma's shared down projection keeps QFP8WT through K padding."""
+        if not spyre_available():
+            pytest.skip("Spyre device not available")
+        register_spyre_fp8_linear_kernel()
+        kernel = _make_kernel(granite_channel=True)
+        gen = torch.Generator().manual_seed(851)
+        weight = (torch.randn(2112, 2816, generator=gen) * 0.05).half()
+        x = (torch.randn(num_tokens, 2112, generator=gen) * 0.5).half()
+        codes, scales = _quantize_weight_fp8_per_channel(weight)
+        layer = self._prepare_spyre_apply_layer(kernel, weight, per_channel=True)
+        assert layer.weight.shape == (2176, 2816)
+        loaded = layer.weight.cpu()
+        torch.testing.assert_close(
+            loaded[:2112].view(torch.uint8), codes.view(torch.uint8), rtol=0, atol=0
+        )
+        assert torch.count_nonzero(loaded[2112:].float()) == 0
+        actual = self._run_spyre_apply(kernel, layer, x.to("spyre")).cpu().float()
+        reference = x.float() @ (codes.float() * scales.float())
+        # One dynamic E4M3 activation quantization: 5% norm budget, independent
+        # of the padded representation used by the device.
+        error = torch.linalg.vector_norm(actual - reference, dim=-1)
+        norm = torch.linalg.vector_norm(reference, dim=-1)
+        assert torch.isfinite(actual).all()
+        assert (error / norm).max() < 0.05
 
     @pytest.mark.parametrize("num_tokens", [1, 4, 128])
     def test_scaled_mm_apply(self, num_tokens):

@@ -1,0 +1,15 @@
+Scanning 177 config file(s) under tests/configs/torch_spyre_tests
+
+CHECK 0: Labels
+  [labels] All 177 config(s) declare explicit labels.
+
+CHECK 0b: Platforms
+  [platforms] All exclude__plat_* tag suffixes recognized.
+
+Reference: tests/inductor/test_fp8_prequantized_load.py
+  14 collectable name(s)  (PARAMS primaries + standalones)
+  0 helper-only method(s) (excluded from MISSING check)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RESULT: 0 duplicates/missing/unlabeled  |  0 dead patterns
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
