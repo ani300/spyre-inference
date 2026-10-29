@@ -1,0 +1,30 @@
+W1029 17:12:45.350000 889317 torch/_library/triton.py:53] Triton not available, find_triton_kernels = []
+Traceback (most recent call last):
+  File "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/examples/experimental/gemma4_fp8_grouped.py", line 95, in main
+    pool = _dma_to_spyre_fp8_kernel(host["gate"].transpose(-1, -2).contiguous())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/model_utils.py", line 294, in _dma_to_spyre_fp8_kernel
+    assert weight.ndim == 2, "FP8 KERNEL layout is for 2D weights only"
+           ^^^^^^^^^^^^^^^^
+AssertionError: FP8 KERNEL layout is for 2D weights only
+{
+  "path": "rank3-dma",
+  "batch": 1,
+  "query_len": 1,
+  "chunks": 4,
+  "layer": 0,
+  "output": "/mnt/devel/inductor_src/analysis/gemma4-fp8-moe-20261029/native-results/rank3-dma-b1-q1.json",
+  "passed": false,
+  "versions": {
+    "torch": "2.13.0+cpu",
+    "torch-spyre": "0.6.0.dev374+head.gf2bb1f8d",
+    "vllm": "0.32.0+empty"
+  },
+  "dispatch": "on-device routing, token-expert expansion and reduction",
+  "weight_storage": "FP8",
+  "matmul": "spyre.scaled_bmm FP8 x FP8 -> DL16",
+  "stage": "rank3_dma",
+  "error_type": "AssertionError",
+  "error": "FP8 KERNEL layout is for 2D weights only",
+  "traceback": "Traceback (most recent call last):\n  File \"/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/examples/experimental/gemma4_fp8_grouped.py\", line 95, in main\n    pool = _dma_to_spyre_fp8_kernel(host[\"gate\"].transpose(-1, -2).contiguous())\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/model_utils.py\", line 294, in _dma_to_spyre_fp8_kernel\n    assert weight.ndim == 2, \"FP8 KERNEL layout is for 2D weights only\"\n           ^^^^^^^^^^^^^^^^\nAssertionError: FP8 KERNEL layout is for 2D weights only\n"
+}

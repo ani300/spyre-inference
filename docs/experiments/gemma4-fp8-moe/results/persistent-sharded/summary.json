@@ -1,0 +1,16 @@
+[
+  {
+    "case": "persistent-sharded-b1-q128",
+    "returncode": 0,
+    "passed": true,
+    "stage": null,
+    "relative_l2": 0.03899107873439789
+  },
+  {
+    "case": "persistent-sharded-b4-q128",
+    "returncode": 0,
+    "passed": true,
+    "stage": null,
+    "relative_l2": 0.039739906787872314
+  }
+]

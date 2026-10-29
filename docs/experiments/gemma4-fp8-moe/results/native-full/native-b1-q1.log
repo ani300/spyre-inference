@@ -1,0 +1,74 @@
+W1029 17:10:38.357000 884312 torch/_library/triton.py:53] Triton not available, find_triton_kernels = []
+Stage: load_gate_pool
+[WARNING] [spyre.inductor.work_division] Cannot satisfy span limit for tensor buf1: coord=d1 still evaluates to 768 after splits. Inner dimensions cannot reduce span further. Best span=603979776, limit=268435456.
+[WARNING] [spyre.inductor.work_division] Cannot satisfy span limit for tensor buf0: coord=d0 still evaluates to 512 after splits. Inner dimensions cannot reduce span further. Best span=301989888, limit=268435456.
+Traceback (most recent call last):
+  File "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/examples/experimental/gemma4_fp8_grouped.py", line 110, in main
+    pools[proj] = load_expert_pool(
+                  ^^^^^^^^^^^^^^^^^
+  File "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/spyre_inference/experimental/fp8_grouped_moe.py", line 147, in load_expert_pool
+    return _pack(raw)
+           ^^^^^^^^^^
+  File "/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py", line 1183, in compile_wrapper
+    raise e.remove_dynamo_frames() from None  # see TORCHDYNAMO_VERBOSE=1
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/torch/_inductor/compile_fx.py", line 1079, in _compile_fx_inner
+    raise InductorError(e, currentframe()).with_traceback(
+  File "/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/torch/_inductor/compile_fx.py", line 1059, in _compile_fx_inner
+    mb_compiled_graph = fx_codegen_and_compile(
+                        ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/torch/_inductor/compile_fx.py", line 1847, in fx_codegen_and_compile
+    return scheme.codegen_and_compile(gm, example_inputs, inputs_to_check, graph_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/torch/_inductor/compile_fx.py", line 1608, in codegen_and_compile
+    compiled_module = graph.compile_to_module()
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/torch/_inductor/graph.py", line 2669, in compile_to_module
+    return self._compile_to_module()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/torch/_inductor/graph.py", line 2675, in _compile_to_module
+    self.codegen_with_cpp_wrapper() if self.cpp_wrapper else self.codegen()
+                                                             ^^^^^^^^^^^^^^
+  File "/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/torch/_inductor/graph.py", line 2607, in codegen
+    self._update_scheduler()
+  File "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/patches.py", line 228, in _spyre_update_scheduler
+    _pre_scheduling_pass(self)
+  File "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/passes.py", line 562, in __call__
+    self._run_pass_loop(graph)
+  File "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/passes.py", line 608, in _run_pass_loop
+    pass_fn(graph)
+  File "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/passes.py", line 413, in _distribute_work
+    work_distribution(graph, preassigned_ops)
+  File "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/work_division.py", line 2867, in work_distribution
+    divide_pointwise_op(op, args, max_cores, work_distribution_pass)
+  File "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/work_division.py", line 2758, in divide_pointwise_op
+    pass_fn(op, args, max_cores)
+  File "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/work_division.py", line 2136, in work_distribution_pass
+    raise_if_per_core_overflow(all_tds, it_space, splits, op.get_name(), symbol_meta)
+  File "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/work_division.py", line 553, in raise_if_per_core_overflow
+    raise Unsupported(
+torch._inductor.exc.InductorError: Unsupported: Spyre backend does not support: buf0: per-core tensor span 576.000 MB (shape=[512, 768, 768], dtype=torch.float16, device_size=[768, 12, 512, 64], splits={d0: 1, d1: 1, d2: 1}) exceeds hardware limit of 256.00 MB
+
+Set TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS="+dynamo"
+
+{
+  "path": "native",
+  "batch": 1,
+  "query_len": 1,
+  "chunks": 4,
+  "layer": 0,
+  "output": "/mnt/devel/inductor_src/analysis/gemma4-fp8-moe-20261029/native-results/native-b1-q1.json",
+  "passed": false,
+  "versions": {
+    "torch": "2.13.0+cpu",
+    "torch-spyre": "0.6.0.dev374+head.gf2bb1f8d",
+    "vllm": "0.32.0+empty"
+  },
+  "dispatch": "on-device routing, token-expert expansion and reduction",
+  "weight_storage": "FP8",
+  "matmul": "spyre.scaled_bmm FP8 x FP8 -> DL16",
+  "stage": "load_gate_pool",
+  "error_type": "InductorError",
+  "error": "Unsupported: Spyre backend does not support: buf0: per-core tensor span 576.000 MB (shape=[512, 768, 768], dtype=torch.float16, device_size=[768, 12, 512, 64], splits={d0: 1, d1: 1, d2: 1}) exceeds hardware limit of 256.00 MB\n\nSet TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS=\"+dynamo\"\n",
+  "traceback": "Traceback (most recent call last):\n  File \"/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/examples/experimental/gemma4_fp8_grouped.py\", line 110, in main\n    pools[proj] = load_expert_pool(\n                  ^^^^^^^^^^^^^^^^^\n  File \"/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/spyre_inference/experimental/fp8_grouped_moe.py\", line 147, in load_expert_pool\n    return _pack(raw)\n           ^^^^^^^^^^\n  File \"/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py\", line 1183, in compile_wrapper\n    raise e.remove_dynamo_frames() from None  # see TORCHDYNAMO_VERBOSE=1\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/torch/_inductor/compile_fx.py\", line 1079, in _compile_fx_inner\n    raise InductorError(e, currentframe()).with_traceback(\n  File \"/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/torch/_inductor/compile_fx.py\", line 1059, in _compile_fx_inner\n    mb_compiled_graph = fx_codegen_and_compile(\n                        ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/torch/_inductor/compile_fx.py\", line 1847, in fx_codegen_and_compile\n    return scheme.codegen_and_compile(gm, example_inputs, inputs_to_check, graph_kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/torch/_inductor/compile_fx.py\", line 1608, in codegen_and_compile\n    compiled_module = graph.compile_to_module()\n                      ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/torch/_inductor/graph.py\", line 2669, in compile_to_module\n    return self._compile_to_module()\n           ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/torch/_inductor/graph.py\", line 2675, in _compile_to_module\n    self.codegen_with_cpp_wrapper() if self.cpp_wrapper else self.codegen()\n                                                             ^^^^^^^^^^^^^^\n  File \"/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/torch/_inductor/graph.py\", line 2607, in codegen\n    self._update_scheduler()\n  File \"/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/patches.py\", line 228, in _spyre_update_scheduler\n    _pre_scheduling_pass(self)\n  File \"/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/passes.py\", line 562, in __call__\n    self._run_pass_loop(graph)\n  File \"/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/passes.py\", line 608, in _run_pass_loop\n    pass_fn(graph)\n  File \"/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/passes.py\", line 413, in _distribute_work\n    work_distribution(graph, preassigned_ops)\n  File \"/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/work_division.py\", line 2867, in work_distribution\n    divide_pointwise_op(op, args, max_cores, work_distribution_pass)\n  File \"/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/work_division.py\", line 2758, in divide_pointwise_op\n    pass_fn(op, args, max_cores)\n  File \"/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/work_division.py\", line 2136, in work_distribution_pass\n    raise_if_per_core_overflow(all_tds, it_space, splits, op.get_name(), symbol_meta)\n  File \"/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/work_division.py\", line 553, in raise_if_per_core_overflow\n    raise Unsupported(\ntorch._inductor.exc.InductorError: Unsupported: Spyre backend does not support: buf0: per-core tensor span 576.000 MB (shape=[512, 768, 768], dtype=torch.float16, device_size=[768, 12, 512, 64], splits={d0: 1, d1: 1, d2: 1}) exceeds hardware limit of 256.00 MB\n\nSet TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS=\"+dynamo\"\n\n"
+}

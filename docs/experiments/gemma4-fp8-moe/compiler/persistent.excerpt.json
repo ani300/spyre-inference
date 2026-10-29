@@ -1,0 +1,740 @@
+[
+  {
+    "source_artifact": "analysis/gemma4-fp8-moe-20261029/inductor-cache/inductor-spyre/2b5f6783_sdsc_fused_add_bmm_fp8_clamp_clone_gelu_mul_permute_qfp8ch_quantscalepertokenfp8_reciprocal_squeeze_unsqueeze_view_zeros_like_0_xzaqdf0d/sdsc_14.json",
+    "source_sha256": "5668c963602f62378a7cd1fe856b9e0cb57f6d3cf74cedc4b6dcefd79aa05fd2",
+    "operation": "14_batchmatmulfp8",
+    "provenance": {
+      "id": "4047996801279352800",
+      "source": null,
+      "aten_op": "spyre.bmm_fp8.default",
+      "ir_chain": [
+        "bmm_fp8_1",
+        "view",
+        "view_1",
+        "view_2",
+        "view_3",
+        "view_4",
+        "view_5",
+        "view_6",
+        "while_loop",
+        "while_loop_body_graph_0_0",
+        "while_loop_cond_graph_0_0",
+        "while_loop_body_graph_0_0_buf24"
+      ],
+      "fused_from": [
+        {
+          "id": "144168270139252083",
+          "source": null,
+          "aten_op": "spyre.bmm_fp8.default",
+          "ir_chain": [
+            "bmm_fp8_1"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "8501615317809886666",
+          "source": {
+            "file": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/wsr/for_each_tile.py",
+            "start_line": 282,
+            "start_col": 0,
+            "end_line": null,
+            "end_col": null
+          },
+          "aten_op": "aten.view.default",
+          "ir_chain": [
+            "view"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "6406674838539760888",
+          "source": {
+            "file": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/wsr/for_each_tile.py",
+            "start_line": 282,
+            "start_col": 0,
+            "end_line": null,
+            "end_col": null
+          },
+          "aten_op": "aten.view.default",
+          "ir_chain": [
+            "view_1"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "1001087931997513309",
+          "source": {
+            "file": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/wsr/for_each_tile.py",
+            "start_line": 282,
+            "start_col": 0,
+            "end_line": null,
+            "end_col": null
+          },
+          "aten_op": "aten.view.default",
+          "ir_chain": [
+            "view_2"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "840386543025121308",
+          "source": {
+            "file": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/wsr/for_each_tile.py",
+            "start_line": 282,
+            "start_col": 0,
+            "end_line": null,
+            "end_col": null
+          },
+          "aten_op": "aten.view.default",
+          "ir_chain": [
+            "view_3"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "4566835358563787131",
+          "source": {
+            "file": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/wsr/for_each_tile.py",
+            "start_line": 282,
+            "start_col": 0,
+            "end_line": null,
+            "end_col": null
+          },
+          "aten_op": "aten.view.default",
+          "ir_chain": [
+            "view_4"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "7724210192602765226",
+          "source": {
+            "file": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/wsr/for_each_tile.py",
+            "start_line": 282,
+            "start_col": 0,
+            "end_line": null,
+            "end_col": null
+          },
+          "aten_op": "aten.view.default",
+          "ir_chain": [
+            "view_5"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "1260505648258304432",
+          "source": {
+            "file": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/wsr/for_each_tile.py",
+            "start_line": 282,
+            "start_col": 0,
+            "end_line": null,
+            "end_col": null
+          },
+          "aten_op": "aten.view.default",
+          "ir_chain": [
+            "view_6"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "5982314925966784237",
+          "source": {
+            "file": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/wsr/for_each_tile.py",
+            "start_line": 424,
+            "start_col": 0,
+            "end_line": null,
+            "end_col": null
+          },
+          "aten_op": null,
+          "ir_chain": [
+            "while_loop"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "3906380129038951910",
+          "source": null,
+          "aten_op": null,
+          "ir_chain": [
+            "while_loop_body_graph_0_0"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "6777435894853623518",
+          "source": null,
+          "aten_op": null,
+          "ir_chain": [
+            "while_loop_cond_graph_0_0"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        }
+      ],
+      "transform_history": [
+        {
+          "kind": "rewrite",
+          "pass_name": "splice_while_loops",
+          "reason": "redirect while_loop carry/tile reads to persistent scratch"
+        },
+        {
+          "kind": "rewrite",
+          "pass_name": "_consume_tile_dim_markers",
+          "reason": "inline erased tile_dim_marker 'while_loop_body_graph_0_0_buf7' body"
+        }
+      ]
+    },
+    "N": {
+      "name_": "n",
+      "x_": 512,
+      "mb_": 768,
+      "out_": 2816,
+      "in_": 1
+    },
+    "primaryDsInfo": {
+      "INPUT": {
+        "layoutDimOrder_": [
+          "x",
+          "out",
+          "in"
+        ],
+        "stickDimOrder_": [
+          "out"
+        ],
+        "stickSize_": [
+          128
+        ]
+      },
+      "KERNEL": {
+        "layoutDimOrder_": [
+          "out",
+          "mb",
+          "in"
+        ],
+        "stickDimOrder_": [
+          "out",
+          "mb"
+        ],
+        "stickSize_": [
+          2,
+          64
+        ]
+      },
+      "OUTPUT": {
+        "layoutDimOrder_": [
+          "mb",
+          "x",
+          "in"
+        ],
+        "stickDimOrder_": [
+          "mb"
+        ],
+        "stickSize_": [
+          64
+        ]
+      }
+    }
+  },
+  {
+    "source_artifact": "analysis/gemma4-fp8-moe-20261029/inductor-cache/inductor-spyre/2b5f6783_sdsc_fused_add_bmm_fp8_clamp_clone_gelu_mul_permute_qfp8ch_quantscalepertokenfp8_reciprocal_squeeze_unsqueeze_view_zeros_like_0_xzaqdf0d/sdsc_23.json",
+    "source_sha256": "160ed9b4d1233e3a87cd68dade94f6e7f49176c387a0e2afad684817df82f219",
+    "operation": "23_batchmatmulfp8",
+    "provenance": {
+      "id": "3789776552738101547",
+      "source": null,
+      "aten_op": "spyre.bmm_fp8.default",
+      "ir_chain": [
+        "bmm_fp8_2",
+        "view",
+        "view_1",
+        "view_2",
+        "view_3",
+        "view_4",
+        "view_5",
+        "view_6",
+        "while_loop",
+        "while_loop_body_graph_0_0",
+        "while_loop_cond_graph_0_0",
+        "while_loop_body_graph_0_0_buf34"
+      ],
+      "fused_from": [
+        {
+          "id": "2049414439519014159",
+          "source": null,
+          "aten_op": "spyre.bmm_fp8.default",
+          "ir_chain": [
+            "bmm_fp8_2"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "8501615317809886666",
+          "source": {
+            "file": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/wsr/for_each_tile.py",
+            "start_line": 282,
+            "start_col": 0,
+            "end_line": null,
+            "end_col": null
+          },
+          "aten_op": "aten.view.default",
+          "ir_chain": [
+            "view"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "6406674838539760888",
+          "source": {
+            "file": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/wsr/for_each_tile.py",
+            "start_line": 282,
+            "start_col": 0,
+            "end_line": null,
+            "end_col": null
+          },
+          "aten_op": "aten.view.default",
+          "ir_chain": [
+            "view_1"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "1001087931997513309",
+          "source": {
+            "file": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/wsr/for_each_tile.py",
+            "start_line": 282,
+            "start_col": 0,
+            "end_line": null,
+            "end_col": null
+          },
+          "aten_op": "aten.view.default",
+          "ir_chain": [
+            "view_2"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "840386543025121308",
+          "source": {
+            "file": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/wsr/for_each_tile.py",
+            "start_line": 282,
+            "start_col": 0,
+            "end_line": null,
+            "end_col": null
+          },
+          "aten_op": "aten.view.default",
+          "ir_chain": [
+            "view_3"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "4566835358563787131",
+          "source": {
+            "file": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/wsr/for_each_tile.py",
+            "start_line": 282,
+            "start_col": 0,
+            "end_line": null,
+            "end_col": null
+          },
+          "aten_op": "aten.view.default",
+          "ir_chain": [
+            "view_4"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "7724210192602765226",
+          "source": {
+            "file": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/wsr/for_each_tile.py",
+            "start_line": 282,
+            "start_col": 0,
+            "end_line": null,
+            "end_col": null
+          },
+          "aten_op": "aten.view.default",
+          "ir_chain": [
+            "view_5"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "1260505648258304432",
+          "source": {
+            "file": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/wsr/for_each_tile.py",
+            "start_line": 282,
+            "start_col": 0,
+            "end_line": null,
+            "end_col": null
+          },
+          "aten_op": "aten.view.default",
+          "ir_chain": [
+            "view_6"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "5982314925966784237",
+          "source": {
+            "file": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/wsr/for_each_tile.py",
+            "start_line": 424,
+            "start_col": 0,
+            "end_line": null,
+            "end_col": null
+          },
+          "aten_op": null,
+          "ir_chain": [
+            "while_loop"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "3906380129038951910",
+          "source": null,
+          "aten_op": null,
+          "ir_chain": [
+            "while_loop_body_graph_0_0"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "6777435894853623518",
+          "source": null,
+          "aten_op": null,
+          "ir_chain": [
+            "while_loop_cond_graph_0_0"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        }
+      ],
+      "transform_history": [
+        {
+          "kind": "rewrite",
+          "pass_name": "splice_while_loops",
+          "reason": "redirect while_loop carry/tile reads to persistent scratch"
+        },
+        {
+          "kind": "rewrite",
+          "pass_name": "_consume_tile_dim_markers",
+          "reason": "inline erased tile_dim_marker 'while_loop_body_graph_0_0_buf8' body"
+        }
+      ]
+    },
+    "N": {
+      "name_": "n",
+      "x_": 512,
+      "mb_": 2816,
+      "out_": 768,
+      "in_": 1
+    },
+    "primaryDsInfo": {
+      "INPUT": {
+        "layoutDimOrder_": [
+          "x",
+          "out",
+          "in"
+        ],
+        "stickDimOrder_": [
+          "out"
+        ],
+        "stickSize_": [
+          128
+        ]
+      },
+      "KERNEL": {
+        "layoutDimOrder_": [
+          "out",
+          "mb",
+          "in"
+        ],
+        "stickDimOrder_": [
+          "out",
+          "mb"
+        ],
+        "stickSize_": [
+          2,
+          64
+        ]
+      },
+      "OUTPUT": {
+        "layoutDimOrder_": [
+          "mb",
+          "x",
+          "in"
+        ],
+        "stickDimOrder_": [
+          "mb"
+        ],
+        "stickSize_": [
+          64
+        ]
+      }
+    }
+  },
+  {
+    "source_artifact": "analysis/gemma4-fp8-moe-20261029/inductor-cache/inductor-spyre/2b5f6783_sdsc_fused_add_bmm_fp8_clamp_clone_gelu_mul_permute_qfp8ch_quantscalepertokenfp8_reciprocal_squeeze_unsqueeze_view_zeros_like_0_xzaqdf0d/sdsc_8.json",
+    "source_sha256": "5a2913764970f3600da491a4acb03393f70ffb07e893139a1c83732feae42133",
+    "operation": "8_batchmatmulfp8",
+    "provenance": {
+      "id": "5210496950137420640",
+      "source": null,
+      "aten_op": "spyre.bmm_fp8.default",
+      "ir_chain": [
+        "bmm_fp8",
+        "view",
+        "view_1",
+        "view_2",
+        "view_3",
+        "view_4",
+        "view_5",
+        "view_6",
+        "while_loop",
+        "while_loop_body_graph_0_0",
+        "while_loop_cond_graph_0_0",
+        "while_loop_body_graph_0_0_buf17"
+      ],
+      "fused_from": [
+        {
+          "id": "9057837886450668937",
+          "source": null,
+          "aten_op": "spyre.bmm_fp8.default",
+          "ir_chain": [
+            "bmm_fp8"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "8501615317809886666",
+          "source": {
+            "file": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/wsr/for_each_tile.py",
+            "start_line": 282,
+            "start_col": 0,
+            "end_line": null,
+            "end_col": null
+          },
+          "aten_op": "aten.view.default",
+          "ir_chain": [
+            "view"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "6406674838539760888",
+          "source": {
+            "file": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/wsr/for_each_tile.py",
+            "start_line": 282,
+            "start_col": 0,
+            "end_line": null,
+            "end_col": null
+          },
+          "aten_op": "aten.view.default",
+          "ir_chain": [
+            "view_1"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "1001087931997513309",
+          "source": {
+            "file": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/wsr/for_each_tile.py",
+            "start_line": 282,
+            "start_col": 0,
+            "end_line": null,
+            "end_col": null
+          },
+          "aten_op": "aten.view.default",
+          "ir_chain": [
+            "view_2"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "840386543025121308",
+          "source": {
+            "file": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/wsr/for_each_tile.py",
+            "start_line": 282,
+            "start_col": 0,
+            "end_line": null,
+            "end_col": null
+          },
+          "aten_op": "aten.view.default",
+          "ir_chain": [
+            "view_3"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "4566835358563787131",
+          "source": {
+            "file": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/wsr/for_each_tile.py",
+            "start_line": 282,
+            "start_col": 0,
+            "end_line": null,
+            "end_col": null
+          },
+          "aten_op": "aten.view.default",
+          "ir_chain": [
+            "view_4"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "7724210192602765226",
+          "source": {
+            "file": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/wsr/for_each_tile.py",
+            "start_line": 282,
+            "start_col": 0,
+            "end_line": null,
+            "end_col": null
+          },
+          "aten_op": "aten.view.default",
+          "ir_chain": [
+            "view_5"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "1260505648258304432",
+          "source": {
+            "file": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/wsr/for_each_tile.py",
+            "start_line": 282,
+            "start_col": 0,
+            "end_line": null,
+            "end_col": null
+          },
+          "aten_op": "aten.view.default",
+          "ir_chain": [
+            "view_6"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "5982314925966784237",
+          "source": {
+            "file": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/wsr/for_each_tile.py",
+            "start_line": 424,
+            "start_col": 0,
+            "end_line": null,
+            "end_col": null
+          },
+          "aten_op": null,
+          "ir_chain": [
+            "while_loop"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "3906380129038951910",
+          "source": null,
+          "aten_op": null,
+          "ir_chain": [
+            "while_loop_body_graph_0_0"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        },
+        {
+          "id": "6777435894853623518",
+          "source": null,
+          "aten_op": null,
+          "ir_chain": [
+            "while_loop_cond_graph_0_0"
+          ],
+          "fused_from": [],
+          "transform_history": []
+        }
+      ],
+      "transform_history": [
+        {
+          "kind": "rewrite",
+          "pass_name": "splice_while_loops",
+          "reason": "redirect while_loop carry/tile reads to persistent scratch"
+        },
+        {
+          "kind": "rewrite",
+          "pass_name": "_consume_tile_dim_markers",
+          "reason": "inline erased tile_dim_marker 'while_loop_body_graph_0_0_buf6' body"
+        }
+      ]
+    },
+    "N": {
+      "name_": "n",
+      "x_": 512,
+      "mb_": 768,
+      "out_": 2816,
+      "in_": 1
+    },
+    "primaryDsInfo": {
+      "INPUT": {
+        "layoutDimOrder_": [
+          "x",
+          "out",
+          "in"
+        ],
+        "stickDimOrder_": [
+          "out"
+        ],
+        "stickSize_": [
+          128
+        ]
+      },
+      "KERNEL": {
+        "layoutDimOrder_": [
+          "out",
+          "mb",
+          "in"
+        ],
+        "stickDimOrder_": [
+          "out",
+          "mb"
+        ],
+        "stickSize_": [
+          2,
+          64
+        ]
+      },
+      "OUTPUT": {
+        "layoutDimOrder_": [
+          "mb",
+          "x",
+          "in"
+        ],
+        "stickDimOrder_": [
+          "mb"
+        ],
+        "stickSize_": [
+          64
+        ]
+      }
+    }
+  }
+]

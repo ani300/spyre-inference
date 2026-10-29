@@ -1,0 +1,8 @@
+[
+  "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/bin/python",
+  "examples/experimental/gemma4_fp8_model.py",
+  "--kv-cache",
+  "fp16",
+  "--output",
+  "/mnt/devel/inductor_src/analysis/gemma4-fp8-moe-20261029/final-model-results/fp16.json"
+]

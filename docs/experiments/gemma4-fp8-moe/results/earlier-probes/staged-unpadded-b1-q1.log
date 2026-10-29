@@ -1,0 +1,24 @@
+Stage: gate_staged
+Stage: gate_repack
+Stage: gate_fp8_gemm
+[ras] [31m ERRR 29.10.2026 16:45:39.598469 [                  ras_base.hpp:  79] {"action":"reset","category":"hardware","code":"0xa35e","description":"The card encountered a problem and triggered a PCIe bus fence operation","message":"PCIe bus master fence","name":"RAS::PCI::BusFence","severity":"ERROR","step":"Reset, reseat, or replace the card","threshold_action":"deconfigure","threshold_count":20,"threshold_duration":1440,"type":"runtime_error"}[0m
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  {"action":"reset","category":"hardware","code":"0xa35e","description":"The card encountered a problem and triggered a PCIe bus fence operation","message":"PCIe bus master fence","name":"RAS::PCI::BusFence","severity":"ERROR","step":"Reset, reseat, or replace the card","threshold_action":"deconfigure","threshold_count":20,"threshold_duration":1440,"type":"runtime_error"}
+Signal Received: 6 (Aborted)
+Signal Received from pid=873911
+*** BACKTRACE ***
+/opt/ibm/spyre/senlib/lib/libsenlib.so(+0x2c7d1f)[0x7f4f42836d1f]
+/lib64/libc.so.6(+0x41140)[0x7f4f69ab2140]
+/lib64/libc.so.6(+0x9785c)[0x7f4f69b0885c]
+/lib64/libc.so.6(gsignal+0x16)[0x7f4f69ab2096]
+/lib64/libc.so.6(abort+0xd7)[0x7f4f69a998fa]
+/lib64/libstdc++.so.6(+0xa603a)[0x7f4f52cd703a]
+/lib64/libstdc++.so.6(+0xbc0ac)[0x7f4f52ced0ac]
+/lib64/libstdc++.so.6(_ZSt10unexpectedv+0x0)[0x7f4f52cd6a39]
+/lib64/libstdc++.so.6(+0xbc338)[0x7f4f52ced338]
+/opt/ibm/spyre/senlib/lib/libsenlib.so(_ZN3RAS3PCI8BusFence5ThrowEv+0x64)[0x7f4f42b9daa4]
+/opt/ibm/spyre/senlib/lib/libsenlib.so(_ZN6senlib6snt1p012PfMSIMonitor13PollingThreadEv+0x2bfd)[0x7f4f42b9cefd]
+/lib64/libstdc++.so.6(+0xee0e4)[0x7f4f52d1f0e4]
+/lib64/libc.so.6(+0x958ff)[0x7f4f69b068ff]
+/lib64/libc.so.6(__clone+0x44)[0x7f4f69b77464]
+*****************

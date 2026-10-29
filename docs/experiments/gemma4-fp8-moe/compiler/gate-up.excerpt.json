@@ -1,0 +1,70 @@
+{
+  "source_artifact": "analysis/gemma4-fp8-moe-20261029/inductor-cache/inductor-spyre/6d8d23e8_sdsc_fused_mul_quantize_fp8_with_scale_scaled_bmm_0_u29nxzk_/sdsc_4.json",
+  "source_sha256": "cce644c4941a4f6d0b16c41e9e0bd5210a2ce8b16522607bb63a7e49082dce34",
+  "operation": "4_batchmatmulfp8",
+  "provenance": {
+    "id": "4545679794318802706",
+    "source": {
+      "file": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/spyre_inference/experimental/fp8_grouped_moe.py",
+      "start_line": 48,
+      "start_col": 0,
+      "end_line": null,
+      "end_col": null
+    },
+    "aten_op": "spyre.scaled_bmm.default",
+    "ir_chain": [
+      "bmm_fp8",
+      "buf4"
+    ],
+    "fused_from": [],
+    "transform_history": []
+  },
+  "N": {
+    "name_": "n",
+    "mb_": 32,
+    "out_": 768,
+    "in_": 768
+  },
+  "primaryDsInfo": {
+    "INPUT": {
+      "layoutDimOrder_": [
+        "in",
+        "mb"
+      ],
+      "stickDimOrder_": [
+        "in"
+      ],
+      "stickSize_": [
+        128
+      ]
+    },
+    "KERNEL": {
+      "layoutDimOrder_": [
+        "in",
+        "out",
+        "mb"
+      ],
+      "stickDimOrder_": [
+        "in",
+        "out"
+      ],
+      "stickSize_": [
+        2,
+        64
+      ]
+    },
+    "OUTPUT": {
+      "layoutDimOrder_": [
+        "mb",
+        "out"
+      ],
+      "stickDimOrder_": [
+        "out"
+      ],
+      "stickSize_": [
+        64
+      ]
+    }
+  },
+  "note": "Descriptor excerpt proving FP8 grouped matmul; not a performance measurement."
+}

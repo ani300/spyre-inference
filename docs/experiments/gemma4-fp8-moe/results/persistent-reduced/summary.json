@@ -1,0 +1,16 @@
+[
+  {
+    "case": "persistent-b1-q128",
+    "returncode": 0,
+    "passed": true,
+    "stage": null,
+    "relative_l2": 0.04242531210184097
+  },
+  {
+    "case": "persistent-b4-q128",
+    "returncode": 0,
+    "passed": true,
+    "stage": null,
+    "relative_l2": 0.043073561042547226
+  }
+]

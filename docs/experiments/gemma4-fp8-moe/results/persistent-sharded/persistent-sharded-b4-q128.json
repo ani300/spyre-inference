@@ -1,0 +1,42 @@
+{
+  "path": "persistent-sharded",
+  "batch": 4,
+  "query_len": 128,
+  "experts": 128,
+  "chunks": 4,
+  "layer": 0,
+  "output": "/mnt/devel/inductor_src/analysis/gemma4-fp8-moe-20261029/sharded-results/persistent-sharded-b4-q128.json",
+  "passed": true,
+  "versions": {
+    "torch": "2.13.0+cpu",
+    "torch-spyre": "0.6.0.dev374+head.gf2bb1f8d",
+    "vllm": "0.32.0+empty"
+  },
+  "dispatch": "on-device routing, token-expert expansion and reduction",
+  "weight_storage": "FP8",
+  "matmul": "spyre.scaled_bmm FP8 x FP8 -> DL16",
+  "pool_logical_bytes": 830472192,
+  "pool_layouts": {
+    "0_gate": "SpyreTensorLayout(device_size=[32, 6, 2816, 128], stride_map =[2162688, 128, 768, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8WT, valid_elements={(0,): 32, (1, 3): 768, (2,): 2816})",
+    "0_up": "SpyreTensorLayout(device_size=[32, 6, 2816, 128], stride_map =[2162688, 128, 768, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8WT, valid_elements={(0,): 32, (1, 3): 768, (2,): 2816})",
+    "0_down": "SpyreTensorLayout(device_size=[32, 22, 768, 128], stride_map =[2162688, 128, 2816, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8WT, valid_elements={(0,): 32, (1, 3): 2816, (2,): 768})",
+    "32_gate": "SpyreTensorLayout(device_size=[32, 6, 2816, 128], stride_map =[2162688, 128, 768, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8WT, valid_elements={(0,): 32, (1, 3): 768, (2,): 2816})",
+    "32_up": "SpyreTensorLayout(device_size=[32, 6, 2816, 128], stride_map =[2162688, 128, 768, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8WT, valid_elements={(0,): 32, (1, 3): 768, (2,): 2816})",
+    "32_down": "SpyreTensorLayout(device_size=[32, 22, 768, 128], stride_map =[2162688, 128, 2816, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8WT, valid_elements={(0,): 32, (1, 3): 2816, (2,): 768})",
+    "64_gate": "SpyreTensorLayout(device_size=[32, 6, 2816, 128], stride_map =[2162688, 128, 768, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8WT, valid_elements={(0,): 32, (1, 3): 768, (2,): 2816})",
+    "64_up": "SpyreTensorLayout(device_size=[32, 6, 2816, 128], stride_map =[2162688, 128, 768, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8WT, valid_elements={(0,): 32, (1, 3): 768, (2,): 2816})",
+    "64_down": "SpyreTensorLayout(device_size=[32, 22, 768, 128], stride_map =[2162688, 128, 2816, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8WT, valid_elements={(0,): 32, (1, 3): 2816, (2,): 768})",
+    "96_gate": "SpyreTensorLayout(device_size=[32, 6, 2816, 128], stride_map =[2162688, 128, 768, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8WT, valid_elements={(0,): 32, (1, 3): 768, (2,): 2816})",
+    "96_up": "SpyreTensorLayout(device_size=[32, 6, 2816, 128], stride_map =[2162688, 128, 768, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8WT, valid_elements={(0,): 32, (1, 3): 768, (2,): 2816})",
+    "96_down": "SpyreTensorLayout(device_size=[32, 22, 768, 128], stride_map =[2162688, 128, 2816, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8WT, valid_elements={(0,): 32, (1, 3): 2816, (2,): 768})"
+  },
+  "cold_compute_seconds": 35.64709095098078,
+  "routing_set_match": false,
+  "routing_different_rows": 3,
+  "routing_max_cutoff_gap": 0.0,
+  "selected_expert_count": 128,
+  "relative_l2": 0.039739906787872314,
+  "max_row_relative_l2": 0.07847195118665695,
+  "max_abs": 0.10504150390625,
+  "reference_norm": 191.54432678222656
+}

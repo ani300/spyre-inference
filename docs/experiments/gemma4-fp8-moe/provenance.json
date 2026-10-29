@@ -1,0 +1,17 @@
+{
+  "repositories": {
+    "spyre-inference-gemma4-fp8": "d69bc3fec204a311b00a0e255e8f7dc0f39406f7",
+    "torch-spyre-gemma4-fp8": "f2bb1f8d875cc0389058384f544145128e5366be"
+  },
+  "lower_stack_sha256": {
+    "sentient/runtime/lib/libflex.so": "abbfcb3d4a887e639d8b3606a585565d34202d898016714d62c3197d8b5917cb",
+    "sentient/deeptools/bin/dbo-opt": "1a3021a8198be471ab44bbd2a10e834a55f7c0051c2f52fe72cbfe74eafd39d2",
+    "sentient/libaiupti/lib/libaiupti.so": "395cb0b1f133a2b87856f416232a4d7b64ca9d2d3dee10d40c4cfc0db00b7d95",
+    "sentient/spyre_comms/lib/libspyre_comms.so.1": "533058b0ab2049f11fe11188b95e0ccf9e11ee8f30316f623e20cb3b5ce3769e"
+  },
+  "model": "RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic",
+  "model_revision": "ed35d7abe5d940da41b4ff06eb482feb0be8cb44",
+  "hf_home": "/mnt/models/hf_cache",
+  "torch_spyre_upstream_main_verified": "f2bb1f8d875cc0389058384f544145128e5366be",
+  "verification": "git fetch https://github.com/torch-spyre/torch-spyre.git main; installed-source byte comparison"
+}

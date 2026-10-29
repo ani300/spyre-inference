@@ -1,0 +1,30 @@
+[
+  {
+    "case": "staged-b1-q1",
+    "returncode": 0,
+    "passed": true,
+    "stage": null,
+    "relative_l2": 0.024974938482046127
+  },
+  {
+    "case": "staged-b4-q1",
+    "returncode": 0,
+    "passed": true,
+    "stage": null,
+    "relative_l2": 0.03585547208786011
+  },
+  {
+    "case": "staged-b1-q128",
+    "returncode": 0,
+    "passed": true,
+    "stage": null,
+    "relative_l2": 0.0389656201004982
+  },
+  {
+    "case": "staged-b4-q128",
+    "returncode": 0,
+    "passed": true,
+    "stage": null,
+    "relative_l2": 0.039692219346761703
+  }
+]

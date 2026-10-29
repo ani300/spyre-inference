@@ -1,0 +1,177 @@
+W1029 17:26:02.636000 904815 torch/_library/triton.py:53] Triton not available, find_triton_kernels = []
+Stage: load_gate_pool
+Stage: load_up_pool
+Stage: load_down_pool
+Stage: moe_tokens
+Stage: token_0_dispatch
+Stage: gate_staged
+Stage: gate_repack
+Stage: gate_fp8_gemm
+Stage: up_staged
+Stage: up_repack
+Stage: up_fp8_gemm
+Stage: gelu
+Stage: down_staged
+Stage: down_repack
+Stage: down_fp8_gemm
+Stage: token_1_dispatch
+Stage: token_2_dispatch
+Stage: token_3_dispatch
+Stage: token_4_dispatch
+Stage: token_5_dispatch
+Stage: token_6_dispatch
+Stage: token_7_dispatch
+Stage: token_8_dispatch
+Stage: token_9_dispatch
+Stage: token_10_dispatch
+Stage: token_11_dispatch
+Stage: token_12_dispatch
+Stage: token_13_dispatch
+Stage: token_14_dispatch
+Stage: token_15_dispatch
+Stage: token_16_dispatch
+Stage: token_17_dispatch
+Stage: token_18_dispatch
+Stage: token_19_dispatch
+Stage: token_20_dispatch
+Stage: token_21_dispatch
+Stage: token_22_dispatch
+Stage: token_23_dispatch
+Stage: token_24_dispatch
+Stage: token_25_dispatch
+Stage: token_26_dispatch
+Stage: token_27_dispatch
+Stage: token_28_dispatch
+Stage: token_29_dispatch
+Stage: token_30_dispatch
+Stage: token_31_dispatch
+Stage: token_32_dispatch
+Stage: token_33_dispatch
+Stage: token_34_dispatch
+Stage: token_35_dispatch
+Stage: token_36_dispatch
+Stage: token_37_dispatch
+Stage: token_38_dispatch
+Stage: token_39_dispatch
+Stage: token_40_dispatch
+Stage: token_41_dispatch
+Stage: token_42_dispatch
+Stage: token_43_dispatch
+Stage: token_44_dispatch
+Stage: token_45_dispatch
+Stage: token_46_dispatch
+Stage: token_47_dispatch
+Stage: token_48_dispatch
+Stage: token_49_dispatch
+Stage: token_50_dispatch
+Stage: token_51_dispatch
+Stage: token_52_dispatch
+Stage: token_53_dispatch
+Stage: token_54_dispatch
+Stage: token_55_dispatch
+Stage: token_56_dispatch
+Stage: token_57_dispatch
+Stage: token_58_dispatch
+Stage: token_59_dispatch
+Stage: token_60_dispatch
+Stage: token_61_dispatch
+Stage: token_62_dispatch
+Stage: token_63_dispatch
+Stage: token_64_dispatch
+Stage: token_65_dispatch
+Stage: token_66_dispatch
+Stage: token_67_dispatch
+Stage: token_68_dispatch
+Stage: token_69_dispatch
+Stage: token_70_dispatch
+Stage: token_71_dispatch
+Stage: token_72_dispatch
+Stage: token_73_dispatch
+Stage: token_74_dispatch
+Stage: token_75_dispatch
+Stage: token_76_dispatch
+Stage: token_77_dispatch
+Stage: token_78_dispatch
+Stage: token_79_dispatch
+Stage: token_80_dispatch
+Stage: token_81_dispatch
+Stage: token_82_dispatch
+Stage: token_83_dispatch
+Stage: token_84_dispatch
+Stage: token_85_dispatch
+Stage: token_86_dispatch
+Stage: token_87_dispatch
+Stage: token_88_dispatch
+Stage: token_89_dispatch
+Stage: token_90_dispatch
+Stage: token_91_dispatch
+Stage: token_92_dispatch
+Stage: token_93_dispatch
+Stage: token_94_dispatch
+Stage: token_95_dispatch
+Stage: token_96_dispatch
+Stage: token_97_dispatch
+Stage: token_98_dispatch
+Stage: token_99_dispatch
+Stage: token_100_dispatch
+Stage: token_101_dispatch
+Stage: token_102_dispatch
+Stage: token_103_dispatch
+Stage: token_104_dispatch
+Stage: token_105_dispatch
+Stage: token_106_dispatch
+Stage: token_107_dispatch
+Stage: token_108_dispatch
+Stage: token_109_dispatch
+Stage: token_110_dispatch
+Stage: token_111_dispatch
+Stage: token_112_dispatch
+Stage: token_113_dispatch
+Stage: token_114_dispatch
+Stage: token_115_dispatch
+Stage: token_116_dispatch
+Stage: token_117_dispatch
+Stage: token_118_dispatch
+Stage: token_119_dispatch
+Stage: token_120_dispatch
+Stage: token_121_dispatch
+Stage: token_122_dispatch
+Stage: token_123_dispatch
+Stage: token_124_dispatch
+Stage: token_125_dispatch
+Stage: token_126_dispatch
+Stage: token_127_dispatch
+Stage: routing_validation
+{
+  "path": "staged",
+  "batch": 1,
+  "query_len": 128,
+  "experts": 128,
+  "chunks": 4,
+  "layer": 0,
+  "output": "/mnt/devel/inductor_src/analysis/gemma4-fp8-moe-20261029/final-staged-results/staged-b1-q128.json",
+  "passed": true,
+  "versions": {
+    "torch": "2.13.0+cpu",
+    "torch-spyre": "0.6.0.dev374+head.gf2bb1f8d",
+    "vllm": "0.32.0+empty"
+  },
+  "dispatch": "on-device routing, token-expert expansion and reduction",
+  "weight_storage": "FP8",
+  "matmul": "spyre.scaled_bmm FP8 x FP8 -> DL16",
+  "pool_logical_bytes": 905969664,
+  "pool_layouts": {
+    "gate": "SpyreTensorLayout(device_size=[512, 768, 6, 128], stride_map =[589824, 768, 128, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8CH, valid_elements={})",
+    "up": "SpyreTensorLayout(device_size=[512, 768, 6, 128], stride_map =[589824, 768, 128, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8CH, valid_elements={})",
+    "down": "SpyreTensorLayout(device_size=[512, 768, 6, 128], stride_map =[589824, 768, 128, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8CH, valid_elements={})"
+  },
+  "cold_compute_seconds": 9.76148934988305,
+  "routing_set_match": false,
+  "routing_different_rows": 1,
+  "routing_max_cutoff_gap": 0.0,
+  "selected_expert_count": 128,
+  "relative_l2": 0.0389656201004982,
+  "max_row_relative_l2": 0.05312309414148331,
+  "max_abs": 0.0790625810623169,
+  "reference_norm": 96.6433334350586
+}

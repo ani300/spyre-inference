@@ -1,0 +1,50 @@
+W1029 17:24:13.042000 903434 torch/_library/triton.py:53] Triton not available, find_triton_kernels = []
+Stage: load_gate_pool
+Stage: load_up_pool
+Stage: load_down_pool
+Stage: moe_tokens
+Stage: token_0_dispatch
+Stage: gate_staged
+Stage: gate_repack
+Stage: gate_fp8_gemm
+Stage: up_staged
+Stage: up_repack
+Stage: up_fp8_gemm
+Stage: gelu
+Stage: down_staged
+Stage: down_repack
+Stage: down_fp8_gemm
+Stage: routing_validation
+{
+  "path": "staged",
+  "batch": 1,
+  "query_len": 1,
+  "experts": 128,
+  "chunks": 4,
+  "layer": 0,
+  "output": "/mnt/devel/inductor_src/analysis/gemma4-fp8-moe-20261029/final-staged-results/staged-b1-q1.json",
+  "passed": true,
+  "versions": {
+    "torch": "2.13.0+cpu",
+    "torch-spyre": "0.6.0.dev374+head.gf2bb1f8d",
+    "vllm": "0.32.0+empty"
+  },
+  "dispatch": "on-device routing, token-expert expansion and reduction",
+  "weight_storage": "FP8",
+  "matmul": "spyre.scaled_bmm FP8 x FP8 -> DL16",
+  "pool_logical_bytes": 905969664,
+  "pool_layouts": {
+    "gate": "SpyreTensorLayout(device_size=[512, 768, 6, 128], stride_map =[589824, 768, 128, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8CH, valid_elements={})",
+    "up": "SpyreTensorLayout(device_size=[512, 768, 6, 128], stride_map =[589824, 768, 128, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8CH, valid_elements={})",
+    "down": "SpyreTensorLayout(device_size=[512, 768, 6, 128], stride_map =[589824, 768, 128, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8CH, valid_elements={})"
+  },
+  "cold_compute_seconds": 7.291893220040947,
+  "routing_set_match": true,
+  "routing_different_rows": 0,
+  "routing_max_cutoff_gap": 0.0,
+  "selected_expert_count": 8,
+  "relative_l2": 0.024974938482046127,
+  "max_row_relative_l2": 0.024974938482046127,
+  "max_abs": 0.03116905689239502,
+  "reference_norm": 12.964017868041992
+}

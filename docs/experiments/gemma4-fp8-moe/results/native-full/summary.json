@@ -1,0 +1,37 @@
+[
+  {
+    "case": "native-b1-q1",
+    "returncode": 1,
+    "passed": false,
+    "stage": "load_gate_pool",
+    "relative_l2": null
+  },
+  {
+    "case": "native-b4-q1",
+    "returncode": 1,
+    "passed": false,
+    "stage": "load_gate_pool",
+    "relative_l2": null
+  },
+  {
+    "case": "persistent-b1-q128",
+    "returncode": 1,
+    "passed": false,
+    "stage": "load_gate_pool",
+    "relative_l2": null
+  },
+  {
+    "case": "persistent-b4-q128",
+    "returncode": 1,
+    "passed": false,
+    "stage": "load_gate_pool",
+    "relative_l2": null
+  },
+  {
+    "case": "rank3-dma-b1-q1",
+    "returncode": 1,
+    "passed": false,
+    "stage": "rank3_dma",
+    "relative_l2": null
+  }
+]

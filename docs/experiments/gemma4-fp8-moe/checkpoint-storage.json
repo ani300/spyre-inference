@@ -1,0 +1,27 @@
+{
+  "other": {
+    "tensors": 598,
+    "elements": 1488455454,
+    "bytes": 2976910908
+  },
+  "vision": {
+    "tensors": 356,
+    "elements": 572794416,
+    "bytes": 1145588832
+  },
+  "expert_scale": {
+    "tensors": 11520,
+    "elements": 16220160,
+    "bytes": 32440320
+  },
+  "expert_fp8": {
+    "tensors": 11520,
+    "elements": 22837985280,
+    "bytes": 22837985280
+  },
+  "dense_fp8": {
+    "tensors": 205,
+    "elements": 1645445120,
+    "bytes": 1645445120
+  }
+}

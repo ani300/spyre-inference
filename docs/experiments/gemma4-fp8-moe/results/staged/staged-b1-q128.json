@@ -1,0 +1,33 @@
+{
+  "path": "staged",
+  "batch": 1,
+  "query_len": 128,
+  "experts": 128,
+  "chunks": 4,
+  "layer": 0,
+  "output": "/mnt/devel/inductor_src/analysis/gemma4-fp8-moe-20261029/final-staged-results/staged-b1-q128.json",
+  "passed": true,
+  "versions": {
+    "torch": "2.13.0+cpu",
+    "torch-spyre": "0.6.0.dev374+head.gf2bb1f8d",
+    "vllm": "0.32.0+empty"
+  },
+  "dispatch": "on-device routing, token-expert expansion and reduction",
+  "weight_storage": "FP8",
+  "matmul": "spyre.scaled_bmm FP8 x FP8 -> DL16",
+  "pool_logical_bytes": 905969664,
+  "pool_layouts": {
+    "gate": "SpyreTensorLayout(device_size=[512, 768, 6, 128], stride_map =[589824, 768, 128, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8CH, valid_elements={})",
+    "up": "SpyreTensorLayout(device_size=[512, 768, 6, 128], stride_map =[589824, 768, 128, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8CH, valid_elements={})",
+    "down": "SpyreTensorLayout(device_size=[512, 768, 6, 128], stride_map =[589824, 768, 128, 1], device_dtype=DataFormats.SEN143_FP8, element_arrangement=ElementArrangement.QFP8CH, valid_elements={})"
+  },
+  "cold_compute_seconds": 9.76148934988305,
+  "routing_set_match": false,
+  "routing_different_rows": 1,
+  "routing_max_cutoff_gap": 0.0,
+  "selected_expert_count": 128,
+  "relative_l2": 0.0389656201004982,
+  "max_row_relative_l2": 0.05312309414148331,
+  "max_abs": 0.0790625810623169,
+  "reference_norm": 96.6433334350586
+}

@@ -1,0 +1,39 @@
+{
+  "batch": 1,
+  "kv_cache": "fp8",
+  "max_tokens": 16,
+  "output": "/mnt/devel/inductor_src/analysis/gemma4-fp8-moe-20261029/final-model-results/fp8.json",
+  "passed": false,
+  "versions": {
+    "torch": "2.13.0+cpu",
+    "torch-spyre": "0.6.0.dev374+head.gf2bb1f8d",
+    "vllm": "0.32.0+empty"
+  },
+  "settings": {
+    "model": "RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic",
+    "revision": "ed35d7abe5d940da41b4ff06eb482feb0be8cb44",
+    "tokenizer_revision": "ed35d7abe5d940da41b4ff06eb482feb0be8cb44",
+    "dtype": "float16",
+    "hf_overrides": {
+      "architectures": [
+        "Gemma4ForCausalLM"
+      ]
+    },
+    "max_model_len": 512,
+    "max_num_seqs": 1,
+    "max_num_batched_tokens": 128,
+    "compilation_config": {
+      "compile_sizes": [
+        1,
+        128
+      ]
+    },
+    "kv_cache_dtype": "fp8",
+    "num_gpu_blocks_override": 5,
+    "enforce_eager": false
+  },
+  "stage": "startup",
+  "error_type": "RuntimeError",
+  "error": "Engine core initialization failed. See root cause above. Failed core proc(s): {}",
+  "traceback": "Traceback (most recent call last):\n  File \"/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/examples/experimental/gemma4_fp8_model.py\", line 62, in main\n    engine = LLM(**settings)\n             ^^^^^^^^^^^^^^^\n  File \"/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/vllm/entrypoints/llm.py\", line 342, in __init__\n    self.llm_engine = LLMEngine.from_engine_args(\n                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/vllm/v1/engine/llm_engine.py\", line 191, in from_engine_args\n    return cls(\n           ^^^^\n  File \"/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/vllm/v1/engine/llm_engine.py\", line 116, in __init__\n    self.engine_core = EngineCoreClient.make_client(\n                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/vllm/v1/engine/core_client.py\", line 126, in make_client\n    return SyncMPClient(\n           ^^^^^^^^^^^^^\n  File \"/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/vllm/tracing/otel.py\", line 175, in sync_wrapper\n    return func(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/vllm/v1/engine/core_client.py\", line 925, in __init__\n    super().__init__(\n  File \"/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/vllm/v1/engine/core_client.py\", line 682, in __init__\n    with launch_core_engines(\n  File \"/mnt/home/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/contextlib.py\", line 144, in __exit__\n    next(self.gen)\n  File \"/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/vllm/v1/engine/utils.py\", line 1351, in launch_core_engines\n    wait_for_engine_startup(\n  File \"/mnt/devel/inductor_src/spyre-inference-fp8-qk/.venv/lib/python3.11/site-packages/vllm/v1/engine/utils.py\", line 1431, in wait_for_engine_startup\n    raise RuntimeError(\nRuntimeError: Engine core initialization failed. See root cause above. Failed core proc(s): {}\n"
+}

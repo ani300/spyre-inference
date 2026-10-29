@@ -1,0 +1,14 @@
+[
+  "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/bin/python",
+  "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/examples/experimental/gemma4_fp8_grouped.py",
+  "--path",
+  "persistent-sharded",
+  "--experts",
+  "128",
+  "--batch",
+  "4",
+  "--query-len",
+  "128",
+  "--output",
+  "/mnt/devel/inductor_src/analysis/gemma4-fp8-moe-20261029/sharded-results/persistent-sharded-b4-q128.json"
+]

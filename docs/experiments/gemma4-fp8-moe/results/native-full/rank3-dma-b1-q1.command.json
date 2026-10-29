@@ -1,0 +1,12 @@
+[
+  "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/bin/python",
+  "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/examples/experimental/gemma4_fp8_grouped.py",
+  "--path",
+  "rank3-dma",
+  "--batch",
+  "1",
+  "--query-len",
+  "1",
+  "--output",
+  "/mnt/devel/inductor_src/analysis/gemma4-fp8-moe-20261029/native-results/rank3-dma-b1-q1.json"
+]

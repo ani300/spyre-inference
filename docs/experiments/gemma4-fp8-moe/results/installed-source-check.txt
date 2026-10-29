@@ -1,0 +1,4 @@
+0.6.0.dev374+head.gf2bb1f8d
+/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/propagate_layouts.py matches_source True
+/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/pass_utils.py matches_source True
+/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/lib/python3.11/site-packages/torch_spyre/_inductor/padding.py matches_source True

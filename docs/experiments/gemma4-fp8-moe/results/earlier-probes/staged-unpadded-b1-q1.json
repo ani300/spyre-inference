@@ -1,0 +1,7 @@
+{
+  "passed": false,
+  "stage": "gate_fp8_gemm",
+  "failure": "process aborted: RAS::PCI::BusFence",
+  "exit_code": 255,
+  "logical_width": 704
+}
