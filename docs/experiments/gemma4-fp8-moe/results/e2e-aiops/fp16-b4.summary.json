@@ -1,0 +1,73 @@
+{
+  "batch": 4,
+  "kv_cache": "fp16",
+  "max_tokens": 16,
+  "max_model_len": 2048,
+  "dataset": "/mnt/models/online_benchmarking_data_reordered/aiops_results_2025.11.03_e2ee1b0_correct_order.jsonl",
+  "dataset_offset": 0,
+  "dataset_sha256": "468cf059f2ec3b14108efc09baffabf5c5a440172a25660673d5a8fa029d0637",
+  "attention_page_loop": "unrolled",
+  "eager_blocks": false,
+  "passed": true,
+  "versions": {
+    "torch": "2.13.0+cpu",
+    "torch-spyre": "0.6.0.dev374+experimentgemma4fp8m.gf2bb1f8d.dirty",
+    "vllm": "0.32.0+empty"
+  },
+  "environment": {
+    "SPYRE_ATTN_RECORD": "0",
+    "SPYRE_ATTN_FOR_EACH_TILE": "0",
+    "SPYRE_KERNEL_CACHE": "0",
+    "SPYRE_NUM_CPUS": "8",
+    "PYTHONPATH": "/mnt/devel/inductor_src/torch-spyre-gemma4-fp8:/mnt/devel/inductor_src/spyre-inference-gemma4-fp8:/mnt/devel/inductor_src/sentient/runtime/lib:/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/tests/plugin"
+  },
+  "settings": {
+    "model": "RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic",
+    "revision": "ed35d7abe5d940da41b4ff06eb482feb0be8cb44",
+    "tokenizer_revision": "ed35d7abe5d940da41b4ff06eb482feb0be8cb44",
+    "dtype": "float16",
+    "hf_overrides": {
+      "architectures": [
+        "Gemma4ForCausalLM"
+      ]
+    },
+    "max_model_len": 2048,
+    "max_num_seqs": 4,
+    "max_num_batched_tokens": 128,
+    "compilation_config": {
+      "compile_sizes": [
+        1,
+        2,
+        4,
+        128
+      ]
+    },
+    "kv_cache_dtype": "auto",
+    "num_gpu_blocks_override": 65,
+    "enforce_eager": false
+  },
+  "startup_seconds": 621.2470392198302,
+  "prompt_lengths": [
+    1165,
+    1329,
+    1488,
+    1490
+  ],
+  "generation_seconds": 2011.7412556461059,
+  "result_kind": "integration_smoke",
+  "completed_at_utc": "2026-10-29T20:07:53.330072+00:00",
+  "output_token_counts": [
+    16,
+    16,
+    16,
+    16
+  ],
+  "ignore_eos": true,
+  "quality_evaluated": false,
+  "steady_state_performance_measured": false,
+  "notes": [
+    "Original prompts and generated text omitted from this summary; raw run artifacts remain local.",
+    "Startup and generation include first-use compilation with attention recording and kernel cache disabled.",
+    "The fixed 16-token budget can truncate structured answers. Passing checks execution and token counts, not answer correctness."
+  ]
+}

@@ -65,6 +65,11 @@ The MoE sees only hidden states and router logits.
 <td><a href="results/e2e-unrolled/fp8-b4.json">JSON</a></td>
 </tr>
 <tr>
+<td>AIOps trace, FP16 KV, four prompts (1165 / 1329 / 1488 / 1490 input tokens), unrolled attention</td>
+<td>Generation passed, 16 output tokens per prompt; 621 s startup + 2012 s processing/generation, including compilation</td>
+<td><a href="results/e2e-aiops/fp16-b4.summary.json">sanitized JSON</a></td>
+</tr>
+<tr>
 <td>Full model, FP8 KV, one sentence, default attention</td>
 <td>Fails in FP8-page dequantization during attention prefill compilation</td>
 <td><a href="results/e2e-final/fp8-b1.log">log</a></td>
@@ -107,6 +112,7 @@ The MoE sees only hidden states and router logits.
 </tbody>
 </table>
 <p>The layer reference dequantizes the original checkpoint weights to FP32 and independently validates routing, including near ties. The 10% global and per-row norm thresholds were declared before these runs. These layer checks are not an end-to-end quality benchmark. Persistent paths use one whole-expert representation; the layer runner’s historical <code>chunks</code> field records the requested CLI value, while <code>effective_chunks</code> records the representation used by new runs (always 1 for persistent paths).</p>
+<p>The AIOps FP16-cache run completed with all four original prompts untruncated and a fixed 16-token output budget. This validates longer-input engine execution, not task accuracy or valid structured output. Its timings include first-use compilation and are not steady-state throughput measurements. As of 2026-10-29 20:17 UTC, the matching FP8-cache case is still in warmup, with no failure recorded; no AIOps FP8 pass is claimed yet.</p>
 <p>Scoped Ruff and runner type checks pass. The <a href="results/e2e/torch-spyre-precommit-review.log">torch-spyre pre-commit run</a> passes its other checks but retains two existing Python 3.11 mypy errors for <code>warnings.warn(skip_file_prefixes=...)</code> at <code>model_utils.py:216</code>.</p>
 <h2>Why the earlier packing issue was avoidable</h2>
 <p>The earlier prototype uploaded FP8 code values through temporary DL16 tensors and called <code>qfp8wt</code> on device. A whole pool exceeded that conversion kernel's per-core address span; four smaller pools worked. That was a limitation of the prototype's conversion route, not a requirement of checkpoint loading. The extended loader now packs the checkpoint bytes directly, exactly where FP8 linear weights are packed. The earlier claim that full-pool device packing blocked engine integration was too broad.</p>
@@ -162,7 +168,7 @@ python -m pytest tests/inductor/test_fp8_prequantized_load.py -q
 <p>Run only one hardware workload at a time. When using a torch-spyre source worktree directly, keep it first on <code>PYTHONPATH</code> after sourcing the environment, and use its rebuilt extension. <code>--eager-blocks</code> is an optional diagnostic that leaves FP8 kernels compiled while using eager transformer-block orchestration. JSON records failures and output tokens; the matrix preserves commands, logs and nonzero exits. The smoke test forces 16 output tokens (<code>ignore_eos=True</code>), so text after an end-of-turn marker is not part of the natural answer. Successful generation is a smoke result, not a claim of model-quality parity or speedup. The AIOps trace uses its original prompts and a fixed generated-token budget, so this is integration coverage rather than the full serving benchmark.</p>
 <p>The interactive <a href="report.html">HTML report</a> is generated from this file by <code>python docs/experiments/gemma4-fp8-moe/render_report.py</code> (requires <code>markdown-it-py</code>).</p>
 <h2>Remaining limitations</h2>
-<p>The default tiled FP8-cache prefill fails with <code>no mechanism to resolve stick incompatibility</code> while converting a gathered <code>[1,8,128,256]</code> FP8 page into the DL16 matmul layout. <code>--attention-page-loop unrolled</code> selects the existing <code>SPYRE_ATTN_FOR_EACH_TILE=0</code> attention implementation; expert <code>for_each_tile</code> stays enabled. The focused tests validate both Gemma head geometries and cache writes against the existing CPU reference. Longer page walks remain unmeasured.</p>
+<p>The default tiled FP8-cache prefill fails with <code>no mechanism to resolve stick incompatibility</code> while converting a gathered <code>[1,8,128,256]</code> FP8 page into the DL16 matmul layout. <code>--attention-page-loop unrolled</code> selects the existing <code>SPYRE_ATTN_FOR_EACH_TILE=0</code> attention implementation; expert <code>for_each_tile</code> stays enabled. The focused tests validate both Gemma head geometries and cache writes against the existing CPU reference. The AIOps FP16-cache run covers prompts up to 1490 tokens; matching longer-input FP8-cache validation is still running.</p>
 <p>TP1, Gemma's GELU/full-softmax routing, 128 experts and top-k 8 only. The bridge rejects unsupported recipes and parallel configurations. The model's vision/audio towers are outside this experiment.</p>
 <p>Persistent decode computes all experts over padded rows, so it is a correctness workaround with substantial extra work. The native gathered FP8 decode path and shared chunk aliases still need compiler work. Neither the FP16 nor FP8 KV-cache choice removes that limitation, because expert storage is independent of the attention cache.</p>
 <p>The <a href="layer-assessment.md">original layer assessment</a> preserves the staged decode path, four-pool persistent path, failing native compiler probes and their numerical results. Those baseline files predate the direct-loader and engine integration changes.</p>

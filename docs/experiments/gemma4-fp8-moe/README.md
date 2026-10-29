@@ -35,6 +35,7 @@ The MoE sees only hidden states and router logits.
 | Full model, FP16 KV, four sentences | Generation passed, 16 output tokens per sentence | [JSON](results/e2e-final/fp16-b4.json) |
 | Full model, FP8 KV, one sentence, unrolled attention | Generation passed; same 16 token IDs as FP16 for this prompt | [JSON](results/e2e-unrolled/fp8-b1.json) |
 | Full model, FP8 KV, four sentences, unrolled attention | Generation passed, 16 output tokens per sentence | [JSON](results/e2e-unrolled/fp8-b4.json) |
+| AIOps trace, FP16 KV, four prompts (1165 / 1329 / 1488 / 1490 input tokens), unrolled attention | Generation passed, 16 output tokens per prompt; 621 s startup + 2012 s processing/generation, including compilation | [sanitized JSON](results/e2e-aiops/fp16-b4.summary.json) |
 | Full model, FP8 KV, one sentence, default attention | Fails in FP8-page dequantization during attention prefill compilation | [log](results/e2e-final/fp8-b1.log) |
 | Gemma FP8 cache, unrolled attention, both head geometries × prefill/decode × one/four sequences | 8 numerical passes | [probe](results/e2e/attention-unrolled-probe.log), [remaining cases](results/e2e/attention-unrolled-matrix.log) |
 | MoE configuration and opaque dispatch selection | 18 passed | [log](results/regression-final/moe-config.log) |
@@ -45,6 +46,8 @@ The MoE sees only hidden states and router logits.
 | Full model, first attempt | All experts load; shared dense MLP's unaligned K loses QFP8WT during compilation | [diagnostic log](results/e2e/fp16-b1-attempt2.log) |
 
 The layer reference dequantizes the original checkpoint weights to FP32 and independently validates routing, including near ties. The 10% global and per-row norm thresholds were declared before these runs. These layer checks are not an end-to-end quality benchmark. Persistent paths use one whole-expert representation; the layer runner’s historical `chunks` field records the requested CLI value, while `effective_chunks` records the representation used by new runs (always 1 for persistent paths).
+
+The AIOps FP16-cache run completed with all four original prompts untruncated and a fixed 16-token output budget. This validates longer-input engine execution, not task accuracy or valid structured output. Its timings include first-use compilation and are not steady-state throughput measurements. As of 2026-10-29 20:17 UTC, the matching FP8-cache case is still in warmup, with no failure recorded; no AIOps FP8 pass is claimed yet.
 
 Scoped Ruff and runner type checks pass. The [torch-spyre pre-commit run](results/e2e/torch-spyre-precommit-review.log) passes its other checks but retains two existing Python 3.11 mypy errors for `warnings.warn(skip_file_prefixes=...)` at `model_utils.py:216`.
 
@@ -113,7 +116,7 @@ The interactive [HTML report](report.html) is generated from this file by `pytho
 
 ## Remaining limitations
 
-The default tiled FP8-cache prefill fails with `no mechanism to resolve stick incompatibility` while converting a gathered `[1,8,128,256]` FP8 page into the DL16 matmul layout. `--attention-page-loop unrolled` selects the existing `SPYRE_ATTN_FOR_EACH_TILE=0` attention implementation; expert `for_each_tile` stays enabled. The focused tests validate both Gemma head geometries and cache writes against the existing CPU reference. Longer page walks remain unmeasured.
+The default tiled FP8-cache prefill fails with `no mechanism to resolve stick incompatibility` while converting a gathered `[1,8,128,256]` FP8 page into the DL16 matmul layout. `--attention-page-loop unrolled` selects the existing `SPYRE_ATTN_FOR_EACH_TILE=0` attention implementation; expert `for_each_tile` stays enabled. The focused tests validate both Gemma head geometries and cache writes against the existing CPU reference. The AIOps FP16-cache run covers prompts up to 1490 tokens; matching longer-input FP8-cache validation is still running.
 
 TP1, Gemma's GELU/full-softmax routing, 128 experts and top-k 8 only. The bridge rejects unsupported recipes and parallel configurations. The model's vision/audio towers are outside this experiment.
 
