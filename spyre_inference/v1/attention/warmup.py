@@ -35,7 +35,7 @@ def record_attention_graphs(
 ) -> int:
     """Pre-compile every Spyre attention layer's kernels; returns the graph count."""
     # The kernels are module-level torch.compile objects: a layer matching an already
-    # recorded one on builder and graph_key() would only replay its graphs.
+    # recorded one on builder, graph_key() and causality would only replay its graphs.
     t0 = time.time()
     total = 0
     num_skipped = 0
@@ -53,7 +53,7 @@ def record_attention_graphs(
             f"Layer {layer_name} has a Spyre attention impl and a KV cache but no "
             "Spyre metadata builder; initialize_attn_backend() must run first."
         )
-        key = (id(builder), impl.graph_key())
+        key = (id(builder), impl.graph_key(), bool(getattr(layer, "spyre_causal", True)))
         if key in recorded:
             num_skipped += 1
             continue
