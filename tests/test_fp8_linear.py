@@ -203,7 +203,8 @@ class TestSpyreFp8LinearKernel:
 
         assert layer.weight.dtype == torch.float8_e4m3fn
         assert layer.weight.device.type == "spyre"
-        assert layer.weight.shape == (in_features, out_features)
+        assert layer.weight.shape == (128, out_features)
+        assert torch.count_nonzero(layer.weight.cpu()[in_features:].float()) == 0
         self._assert_qfp8wt(layer.weight)
         assert layer.weight_scale.shape == (1, out_features)
         assert layer.weight_scale.numel() == out_features

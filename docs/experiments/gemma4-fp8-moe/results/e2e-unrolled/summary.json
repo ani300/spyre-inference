@@ -1,0 +1,14 @@
+[
+  {
+    "case": "fp8-b1",
+    "returncode": 0,
+    "passed": true,
+    "stage": null
+  },
+  {
+    "case": "fp8-b4",
+    "returncode": 0,
+    "passed": true,
+    "stage": null
+  }
+]

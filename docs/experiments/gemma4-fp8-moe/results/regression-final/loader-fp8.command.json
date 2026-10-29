@@ -1,0 +1,10 @@
+{
+  "cwd": "/mnt/devel/inductor_src/torch-spyre-gemma4-fp8",
+  "command": [
+    "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/inductor/test_fp8_prequantized_load.py",
+    "-q"
+  ]
+}

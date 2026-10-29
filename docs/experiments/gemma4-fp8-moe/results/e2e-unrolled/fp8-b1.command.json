@@ -1,0 +1,17 @@
+[
+  "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/bin/python",
+  "-u",
+  "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/examples/experimental/gemma4_fp8_model.py",
+  "--kv-cache",
+  "fp8",
+  "--batch",
+  "1",
+  "--output",
+  "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/docs/experiments/gemma4-fp8-moe/results/e2e-unrolled/fp8-b1.json",
+  "--max-tokens",
+  "16",
+  "--max-model-len",
+  "512",
+  "--attention-page-loop",
+  "unrolled"
+]

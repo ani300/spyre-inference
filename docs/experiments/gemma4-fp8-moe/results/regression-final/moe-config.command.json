@@ -1,0 +1,12 @@
+{
+  "cwd": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8",
+  "command": [
+    "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/models/test_gemma4_moe.py",
+    "-q",
+    "-k",
+    "configure or moe_runner_traces"
+  ]
+}

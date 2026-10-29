@@ -1,0 +1,76 @@
+{
+  "batch": 1,
+  "kv_cache": "fp8",
+  "max_tokens": 16,
+  "max_model_len": 512,
+  "dataset": null,
+  "dataset_offset": 0,
+  "attention_page_loop": "unrolled",
+  "eager_blocks": false,
+  "output": "/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/docs/experiments/gemma4-fp8-moe/results/e2e-unrolled/fp8-b1.json",
+  "passed": true,
+  "versions": {
+    "torch": "2.13.0+cpu",
+    "torch-spyre": "0.6.0.dev374+experimentgemma4fp8m.gf2bb1f8d.dirty",
+    "vllm": "0.32.0+empty"
+  },
+  "environment": {
+    "SPYRE_ATTN_RECORD": "0",
+    "SPYRE_ATTN_FOR_EACH_TILE": "0",
+    "SPYRE_KERNEL_CACHE": "0",
+    "SPYRE_NUM_CPUS": "8",
+    "PYTHONPATH": "/mnt/devel/inductor_src/torch-spyre-gemma4-fp8:/mnt/devel/inductor_src/spyre-inference-gemma4-fp8:/mnt/devel/inductor_src/sentient/runtime/lib:/mnt/devel/inductor_src/spyre-inference-gemma4-fp8/tests/plugin"
+  },
+  "settings": {
+    "model": "RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic",
+    "revision": "ed35d7abe5d940da41b4ff06eb482feb0be8cb44",
+    "tokenizer_revision": "ed35d7abe5d940da41b4ff06eb482feb0be8cb44",
+    "dtype": "float16",
+    "hf_overrides": {
+      "architectures": [
+        "Gemma4ForCausalLM"
+      ]
+    },
+    "max_model_len": 512,
+    "max_num_seqs": 1,
+    "max_num_batched_tokens": 128,
+    "compilation_config": {
+      "compile_sizes": [
+        1,
+        128
+      ]
+    },
+    "kv_cache_dtype": "fp8",
+    "num_gpu_blocks_override": 5,
+    "enforce_eager": false
+  },
+  "startup_seconds": 188.5334433540702,
+  "prompt_lengths": [
+    23
+  ],
+  "generation_seconds": 177.52606000192463,
+  "outputs": [
+    {
+      "prompt": "What is the capital of France? Answer briefly.",
+      "text": "The capital of France is Paris.\nthought\nThe capital of France",
+      "token_ids": [
+        818,
+        5279,
+        529,
+        7001,
+        563,
+        9079,
+        236761,
+        106,
+        107,
+        45518,
+        107,
+        101,
+        818,
+        5279,
+        529,
+        7001
+      ]
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 
 Model: [RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic](https://huggingface.co/RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic), revision `ed35d7abe5d940da41b4ff06eb482feb0be8cb44`. Assessment: 2026-10-29, TP1, text backbone.
 
-**The integrated B path generates text with FP8 expert storage and FP8 expert matmuls.** The single- and four-sentence FP16 KV-cache cases passed. The default tiled attention path fails to compile an FP8 cache read at Gemma’s head geometry; the existing Python attention page loop passes all eight focused Gemma cache checks. Full-model FP8-cache retries with that workaround are running. All 30 layers load, and the default compiled transformer blocks remain enabled.
+**The integrated B path generates text with FP8 expert storage and FP8 expert matmuls.** The single- and four-sentence FP16 KV-cache cases passed. The default tiled attention path fails to compile an FP8 cache read at Gemma’s head geometry; the existing Python attention page loop passes all eight focused Gemma cache checks. Full-model FP8-cache generation passes for both one and four sentences with that workaround. All 30 layers load, and the default compiled transformer blocks remain enabled.
 
 ## What changed
 
@@ -33,14 +33,20 @@ The MoE sees only hidden states and router logits.
 | --- | --- | --- |
 | Full model, FP16 KV, one sentence | Generation passed, 16 output tokens | [JSON](results/e2e-final/fp16-b1.json) |
 | Full model, FP16 KV, four sentences | Generation passed, 16 output tokens per sentence | [JSON](results/e2e-final/fp16-b4.json) |
+| Full model, FP8 KV, one sentence, unrolled attention | Generation passed; same 16 token IDs as FP16 for this prompt | [JSON](results/e2e-unrolled/fp8-b1.json) |
+| Full model, FP8 KV, four sentences, unrolled attention | Generation passed, 16 output tokens per sentence | [JSON](results/e2e-unrolled/fp8-b4.json) |
 | Full model, FP8 KV, one sentence, default attention | Fails in FP8-page dequantization during attention prefill compilation | [log](results/e2e-final/fp8-b1.log) |
 | Gemma FP8 cache, unrolled attention, both head geometries × prefill/decode × one/four sequences | 8 numerical passes | [probe](results/e2e/attention-unrolled-probe.log), [remaining cases](results/e2e/attention-unrolled-matrix.log) |
+| MoE configuration and opaque dispatch selection | 18 passed | [log](results/regression-final/moe-config.log) |
 | CPU dispatch, padding, chunk equations and reduction | 8 passed | [log](results/e2e/grouped-cpu-tests.log) |
-| Rank-2/3/4 DMA, source views/offsets, grouped matmul | 14 passed | [log](results/e2e/loader-tests-canonical.log) |
+| Full FP8 loader suite, including rank-2/3/4 DMA, source views/offsets and grouped matmul | 31 passed | [log](results/regression-final/loader-fp8.log) |
+| Full dense FP8 linear suite, including Gemma K=2112 padding at 1/4/128 rows | 39 passed | [log](results/regression-final/dense-fp8.log) |
 | Real layer 0, 128 experts, 128 tokens, direct DMA + persistent FP8 | Pass: 3.90% global relative L2, 5.30% worst row | [JSON](results/e2e/persistent-dma-b1-q128.json), [log](results/e2e/persistent-dma-b1-q128.log) |
 | Full model, first attempt | All experts load; shared dense MLP's unaligned K loses QFP8WT during compilation | [diagnostic log](results/e2e/fp16-b1-attempt2.log) |
 
 The layer reference dequantizes the original checkpoint weights to FP32 and independently validates routing, including near ties. The 10% global and per-row norm thresholds were declared before these runs. These layer checks are not an end-to-end quality benchmark.
+
+Scoped Ruff and runner type checks pass. The [torch-spyre pre-commit run](results/e2e/torch-spyre-precommit-review.log) passes its other checks but retains two existing Python 3.11 mypy errors for `warnings.warn(skip_file_prefixes=...)` at `model_utils.py:216`.
 
 ## Why the earlier packing issue was avoidable
 
@@ -60,7 +66,7 @@ source /mnt/devel/inductor_src/torch-spyre-docs/scripts/dev-env.sh
 source .venv/bin/activate
 export SENLIB_INSTALL_DIR=/opt/ibm/spyre/senlib
 export LD_LIBRARY_PATH="$SPYRE_COMMS_INSTALL_DIR/lib:$LIBAIUPTI_INSTALL_DIR/lib:$RUNTIME_INSTALL_DIR/lib:$DEEPTOOLS_INSTALL_DIR/lib:$SENLIB_INSTALL_DIR/lib"
-export PYTHONPATH="$PWD:$SENTIENT_BASE_INSTALL_DIR/runtime/lib"
+export PYTHONPATH="$PWD:$PWD/tests/plugin:$SENTIENT_BASE_INSTALL_DIR/runtime/lib"
 export HF_HOME=/mnt/models/hf_cache
 export HF_HUB_OFFLINE=1
 export OMP_NUM_THREADS=4 OMP_WAIT_POLICY=PASSIVE SPYRE_NUM_CPUS=8
@@ -84,7 +90,7 @@ python examples/experimental/gemma4_fp8_model.py --batch 4 --kv-cache fp8 \
   --attention-page-loop unrolled --output results/gemma-fp8-b4.json
 
 # Real benchmark-trace inputs; actual Gemma token lengths are checked, not truncated.
-python examples/experimental/run_gemma4_fp8_e2e.py --max-model-len 4096 \
+python examples/experimental/run_gemma4_fp8_e2e.py --batch 4 --max-model-len 2048 \
   --dataset /mnt/models/online_benchmarking_data_reordered/aiops_results_2025.11.03_e2ee1b0_correct_order.jsonl \
   --attention-page-loop unrolled --output-dir results/gemma-aiops
 

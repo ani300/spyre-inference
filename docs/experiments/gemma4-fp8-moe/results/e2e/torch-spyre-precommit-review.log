@@ -1,0 +1,104 @@
+ruff check...............................................................Passed
+ruff format..............................................................Passed
+PyMarkdown...............................................................Passed
+Lint GitHub Actions workflow files.......................................Passed
+clang-format.............................................................Passed
+cpplint..................................................................Passed
+mypy.....................................................................Failed
+- hook id: mypy
+- exit code: 1
+
+tests/test_regex.py:22: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/test_reuse_copy.py:208: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/oot_framework/oot_test_matching.py:57: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/oot_framework/oot_test_matching.py:58: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/test_memory_pressure_gc.py:197: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/ops/eager.py:263: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/ops/eager.py:264: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/test_ingest_xml.py:1239: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/test_ingest_xml.py:1249: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/test_logging_patterns.py:112: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/scratchpad/cpsat_expr_printer.py:92: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/profiler/test_ffdc.py:491: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/profiler/test_ffdc.py:1007: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/profiler/test_ffdc.py:1140: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/conftest.py:516: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/models/test_model_ops.py:144: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/models/test_model_ops.py:146: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/oot_framework/oot_test_base_common.py:570: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/oot_framework/oot_test_base_common.py:585: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/oot_framework/oot_test_base_common.py:586: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/oot_framework/oot_test_base_common.py:594: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/oot_framework/oot_test_base_common.py:595: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/oot_framework/oot_test_base_common.py:654: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/oot_framework/oot_test_base_common.py:676: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/oot_framework/oot_test_base_common.py:701: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/oot_framework/oot_test_base_common.py:713: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/oot_framework/oot_test_base_common.py:747: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/oot_framework/oot_test_base_common.py:755: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/oot_framework/oot_test_base_common.py:763: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/oot_framework/oot_test_base_common.py:783: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/oot_framework/oot_test_base_common.py:845: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/oot_framework/oot_test_base_common.py:959: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/pass_utils.py:1045: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/pass_utils.py:1046: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/pass_utils.py:1047: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/pass_utils.py:1048: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/wsr/for_each_tile_lowering.py:2209: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/insert_restickify.py:116: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/insert_restickify.py:123: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/insert_restickify.py:512: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/cost_features.py:673: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/spyre_kernel.py:1484: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/scratchpad/ilp_solver_ortools.py:304: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/scratchpad/ilp_solver_ortools.py:319: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/scratchpad/ilp_solver_ortools.py:322: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/scratchpad/ilp_solver_ortools.py:328: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/scratchpad/ilp_solver_ortools.py:330: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/scratchpad/ilp_solver_ortools.py:334: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/scratchpad/ilp_solver_ortools.py:339: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/scratchpad/ilp_solver_ortools.py:343: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/scratchpad/ilp_solver_ortools.py:347: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/scratchpad/ilp_solver_ortools.py:351: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/scratchpad/ilp_solver_ortools.py:355: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/scratchpad/ilp_solver_ortools.py:452: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/scratchpad/ilp_solver_ortools.py:485: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/scratchpad/ilp_solver_ortools.py:486: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/scratchpad/ilp_solver_ortools.py:500: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/scratchpad/ilp_solver_ortools.py:501: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/scratchpad/allocator.py:3380: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/lowering.py:1450: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/lowering.py:1945: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/lowering.py:1946: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/tensor/test_coordinates.py:228: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/codegen/compute_ops.py:1133: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/_inductor/codegen/compute_ops.py:1155: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/execution/kernel_cache.py:68: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/execution/async_compile.py:401: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/profiler/test_spyre_profiler.py:70: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/profiler/test_spyre_profiler.py:71: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/op_specs/test_op_spec_lab.py:346: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/op_specs/test_op_spec_lab.py:415: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/op_specs/test_op_spec_lab.py:612: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/op_specs/test_op_spec_lab.py:630: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/op_specs/test_op_spec_lab.py:663: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/op_specs/test_op_spec_lab.py:736: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+torch_spyre/model_utils.py:216: error: Unexpected keyword argument "skip_file_prefixes" for overloaded function "warn"  [call-overload]
+torch_spyre/model_utils.py:216: error: No overload variant of "warn" matches argument types "str", "tuple[str]"  [call-overload]
+torch_spyre/model_utils.py:216: note: Possible overload variants:
+torch_spyre/model_utils.py:216: note:     def warn(message: str, category: type[Warning] | None = ..., stacklevel: int = ..., source: Any | None = ...) -> None
+torch_spyre/model_utils.py:216: note:     def warn(message: Warning, category: Any = ..., stacklevel: int = ..., source: Any | None = ...) -> None
+Found 2 errors in 1 file (checked 228 source files)
+
+Format YAML files........................................................Passed
+Forbid pytest.ini (use pyproject.toml instead).......(no files to check)Skipped
+Check requirements/dev.txt sync..........................................Passed
+Check for spaces in all filenames........................................Passed
+Enforce import regex as re...............................................Passed
+Validate agent context structure.........................................Passed
+Suggestion...............................................................Passed
+- hook id: suggestion
+- duration: 0s
+
+To bypass all the pre-commit hooks, add --no-verify to git commit. To skip a specific hook, prefix the commit command with SKIP=<hook-id>.
+
