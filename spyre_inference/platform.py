@@ -241,7 +241,7 @@ class TorchSpyrePlatform(CpuPlatform):
 
         from spyre_inference.v1.spec_decode import rejection_sampler
 
-        # CpuPlatform's overrides call vllm._C, which our empty build does not provide.
+        # Use our vendored C++ kernels; CpuPlatform's wrappers require the absent vllm._C.
         register_kernels(
             {
                 "vllm.v1.sample.rejection_sampler.rejection_greedy_sample_kernel": (

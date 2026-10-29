@@ -23,11 +23,11 @@ from vllm.triton_utils import dispatcher
 from vllm.v1.sample import rejection_sampler as upstream
 
 from spyre_inference.platform import TorchSpyrePlatform
-from spyre_inference.v1.spec_decode import rejection_sampler as portable
+from spyre_inference.v1.spec_decode import rejection_sampler as native
 
 
 @pytest.fixture(scope="module", autouse=True)
-def portable_kernels():
+def registered_kernels():
     names = (
         "rejection_greedy_sample_kernel",
         "rejection_random_sample_kernel",
@@ -63,17 +63,17 @@ def portable_kernels():
 @pytest.mark.parametrize("synthetic", [False, True])
 @pytest.mark.parametrize("use_fp64", [False, True])
 def test_platform_registration_preserves_dispatchers_and_warmup(
-    portable_kernels, synthetic, use_fp64
+    registered_kernels, synthetic, use_fp64
 ):
-    assert portable_kernels == (
+    assert registered_kernels == (
         upstream._rejection_greedy_sample,
         upstream._rejection_random_sample,
         upstream._expand,
         upstream._sample_recovered_tokens,
     )
     for owner, implementation in zip(
-        portable_kernels,
-        (portable.greedy_sample, portable.random_sample, portable.expand, portable.recover),
+        registered_kernels,
+        (native.greedy_sample, native.random_sample, native.expand, native.recover),
         strict=True,
     ):
         assert owner.kernel.func is implementation
@@ -286,3 +286,103 @@ def test_random_rejection_preserves_target_distribution(with_draft_probs):
     )
     frequency = result[:, 0].bincount(minlength=3).float() / n
     torch.testing.assert_close(frequency, p, atol=0.015, rtol=0)
+
+
+def test_rejection_sampling_requires_native_extension(monkeypatch):
+    monkeypatch.setattr(native, "_HAS_REJECTION_KERNELS", False)
+    with pytest.raises(RuntimeError, match="Rejection sampling requires the C\\+\\+ kernels"):
+        upstream.expand_batch_to_tokens(torch.ones(1), torch.tensor([1]), 1)
+
+
+@pytest.mark.parametrize("output_dtype", [torch.int32, torch.int64])
+@pytest.mark.parametrize("draft_dtype", [torch.int32, torch.int64])
+def test_greedy_accepts_mixed_id_dtypes_and_preserves_unwritten_tail(output_dtype, draft_dtype):
+    output = torch.full((2, 3), 42, dtype=output_dtype)
+    upstream._rejection_greedy_sample(
+        output,
+        torch.tensor([2, 3], dtype=torch.int32),
+        torch.tensor([70001, 90003, 100007], dtype=draft_dtype),
+        torch.tensor([70001, 90005, 100007], dtype=torch.int64),
+        torch.tensor([[150000], [120000]], dtype=torch.int32),
+        None,
+        2,
+        None,
+        None,
+    )
+    assert output.tolist() == [[70001, 90005, 42], [100007, 120000, 42]]
+
+
+@pytest.mark.parametrize("synthetic", [False, True])
+def test_random_acceptance_preserves_fp64_thresholds(synthetic):
+    # The uniforms become indistinguishable if a wrapper narrows them to FP32.
+    threshold = torch.tensor(0.6).double()
+    uniform = torch.stack(
+        [
+            torch.nextafter(threshold, threshold.new_tensor(float("-inf"))),
+            threshold,
+            torch.nextafter(threshold, threshold.new_tensor(float("inf"))),
+        ]
+    )
+    output = torch.full((3, 2), -1, dtype=torch.int32)
+    upstream._rejection_random_sample(
+        output,
+        torch.tensor([1, 2, 3], dtype=torch.int32),
+        torch.ones(3, dtype=torch.int32),
+        None,
+        torch.tensor([[0.4, 0.6]] * 3),
+        torch.full((3, 1), 1, dtype=torch.int64),
+        torch.zeros(3, dtype=torch.int64),
+        uniform,
+        torch.zeros(3, dtype=torch.bool),
+        1,
+        torch.tensor([0.6]) if synthetic else None,
+    )
+    expected = [[1, 1], [0, -1], [0, -1]] if synthetic else [[1, 1], [1, 1], [0, -1]]
+    assert output.tolist() == expected
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64, torch.int32, torch.int64])
+def test_expand_preserves_parameter_dtype(dtype):
+    floating = dtype.is_floating_point
+    values = torch.tensor([0, 0.5 if floating else 70001, 1], dtype=dtype)
+    actual = upstream.expand_batch_to_tokens(
+        values, torch.tensor([0, 2, 3], dtype=torch.int32), 3, replace_from=1, replace_to=9
+    )
+    assert actual.dtype == dtype
+    assert actual.tolist() == ([0.5, 0.5, 9] if floating else [70001, 70001, 9])
+
+
+@pytest.mark.parametrize("cumulative", [[-1, 3], [2, 1], [1, 4], [1, 2]])
+def test_native_rejects_invalid_cumulative_before_writing(cumulative):
+    output = torch.full((2, 4), 42, dtype=torch.int32)
+    with pytest.raises(RuntimeError, match="cumulative must"):
+        upstream._rejection_greedy_sample(
+            output,
+            torch.tensor(cumulative),
+            torch.tensor([1, 2, 3]),
+            torch.tensor([1, 2, 3]),
+            torch.tensor([0, 0]),
+            None,
+            3,
+            None,
+            None,
+        )
+    assert torch.all(output == 42)
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize("no_draft", [False, True])
+def test_recovery_preserves_zero_times_infinite_noise(dtype, no_draft):
+    # Masking a drafted token or a zero residual still multiplies 0 * inf.
+    # torch.argmax returns the first resulting NaN, even after a finite score.
+    output = torch.empty(2, dtype=torch.int32)
+    upstream._sample_recovered_tokens(
+        output,
+        torch.tensor([0, 2, 2], dtype=torch.int32),
+        torch.tensor([1, 1], dtype=torch.int32),
+        None if no_draft else torch.tensor([[0.1, 0.3, 0.4]] * 2),
+        torch.tensor([[0.2, 0.3, 0.5]] * 2),
+        torch.tensor([[1, 1, 1], [1, float("inf"), 1], [1, 1, 1]], dtype=dtype),
+        max_spec_len=2,
+    )
+    assert output.tolist() == [1, 1]

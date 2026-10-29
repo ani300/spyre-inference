@@ -15,14 +15,34 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 # SPDX-License-Identifier: Apache-2.0
 
-"""TEMPORARY / vendored: PyTorch ports of vLLM 0.32.0's rejection sampler kernels.
+"""vLLM 0.32.0 dispatcher adapters for the vendored csrc/cpu/spec_decode_utils.cpp.
 
-Source: vllm/v1/sample/rejection_sampler.py: rejection_greedy_sample_kernel,
-rejection_random_sample_kernel, expand_kernel and sample_recovered_tokens_kernel.
-Remove when upstream CPU ops are loadable without vllm._C or supplied by csrc/ (#1417).
+Adapted from vllm/utils/cpu_triton_utils.py at 5df63a7203. The native kernels
+accept the caller's dtypes directly and implement synthetic acceptance.
 """
 
 import torch
+
+from spyre_inference.v1.sample.sampling_kernels import has_sampling_kernels
+
+_HAS_REJECTION_KERNELS = has_sampling_kernels() and all(
+    hasattr(torch.ops._spyre_C, name)
+    for name in (
+        "rejection_greedy_sample_kernel_impl",
+        "rejection_random_sample_kernel_impl",
+        "expand_kernel_impl",
+        "sample_recovered_tokens_kernel_impl",
+    )
+)
+
+
+def _kernels():
+    if not _HAS_REJECTION_KERNELS:
+        raise RuntimeError(
+            "Rejection sampling requires the C++ kernels. "
+            "Rebuild spyre-inference's csrc/ CPU extension before using speculative decoding."
+        )
+    return torch.ops._spyre_C
 
 
 def greedy_sample(
@@ -37,24 +57,18 @@ def greedy_sample(
     conditional_rates,
     SYNTHETIC_MODE,
 ):
-    start = 0
-    for request, end in enumerate(cumulative.tolist()):
-        if is_greedy is None or is_greedy[request]:
-            for position, index in enumerate(range(start, end)):
-                draft = draft_ids[index]
-                accepted = (
-                    draft >= 0 and uniform[index] < conditional_rates[position]
-                    if SYNTHETIC_MODE
-                    else draft == target_ids[index]
-                )
-                output[request, position] = (
-                    draft if SYNTHETIC_MODE and accepted else target_ids[index]
-                )
-                if not accepted:
-                    break
-            else:
-                output[request, end - start] = bonus_ids.reshape(-1)[request]
-        start = end
+    _kernels().rejection_greedy_sample_kernel_impl(
+        output,
+        cumulative,
+        draft_ids,
+        target_ids,
+        bonus_ids,
+        is_greedy,
+        max_spec_len,
+        uniform,
+        conditional_rates,
+        SYNTHETIC_MODE,
+    )
 
 
 def random_sample(
@@ -73,32 +87,26 @@ def random_sample(
     NO_DRAFT_PROBS,
     SYNTHETIC_MODE,
 ):
-    start = 0
-    for request, end in enumerate(cumulative.tolist()):
-        if not is_greedy[request]:
-            for position, index in enumerate(range(start, end)):
-                draft = int(draft_ids[index])
-                if draft < 0:
-                    accepted = False
-                elif SYNTHETIC_MODE:
-                    accepted = uniform[index] < conditional_rates[position]
-                else:
-                    q = 1.0 if NO_DRAFT_PROBS else draft_probs[index, draft]
-                    accepted = q > 0 and target_probs[index, draft] / q >= uniform[index]
-                output[request, position] = draft if accepted else recovered_ids[index]
-                if not accepted:
-                    break
-            else:
-                output[request, end - start] = bonus_ids.reshape(-1)[request]
-        start = end
+    _kernels().rejection_random_sample_kernel_impl(
+        output,
+        cumulative,
+        draft_ids,
+        draft_probs,
+        target_probs,
+        bonus_ids,
+        recovered_ids,
+        uniform,
+        is_greedy,
+        max_spec_len,
+        vocab_size,
+        conditional_rates,
+        NO_DRAFT_PROBS,
+        SYNTHETIC_MODE,
+    )
 
 
 def expand(output, values, cumulative, replace_from, replace_to, MAX_NUM_TOKENS):
-    start = 0
-    for request, end in enumerate(cumulative.tolist()):
-        value = values[request]
-        output[start:end] = replace_to if value == replace_from else value
-        start = end
+    _kernels().expand_kernel_impl(output, values, cumulative, replace_from, replace_to)
 
 
 def recover(
@@ -113,30 +121,13 @@ def recover(
     NO_DRAFT_PROBS,
     USE_FP64_GUMBEL,
 ):
-    counts = cumulative.diff(prepend=cumulative.new_zeros(1))
-    widths, group_sizes = counts.unique_consecutive(return_counts=True)
-    start = request = 0
-    # Group equal draft lengths to broadcast one noise row per request, avoiding
-    # a full [num_tokens, vocab_size] copy of the noise with repeat_interleave.
-    for width, group_size in zip(widths.tolist(), group_sizes.tolist(), strict=True):
-        end = start + width * group_size
-        if width:
-            target = target_probs[start:end].view(group_size, width, vocab_size)
-            noise = inverse_noise[request : request + group_size, None, :]
-            if NO_DRAFT_PROBS:
-                scores = (target * noise).view(-1, vocab_size)
-                ids = draft_ids[start:end].long()
-                valid = (ids >= 0) & (ids < vocab_size)
-                rows = torch.arange(end - start, device=ids.device)[valid]
-                # Mask after multiplying to avoid a residual copy; preserve 0 * inf.
-                scores[rows, ids[valid]] = 0 * inverse_noise[request + rows // width, ids[valid]]
-            else:
-                draft = draft_probs[start:end].view_as(target)
-                residual = (target - draft).clamp_min_(0)
-                scores = residual.to(torch.promote_types(residual.dtype, noise.dtype))
-                scores.mul_(noise)
-                scores = scores.view(-1, vocab_size)
-            # torch.argmax chooses the first index on ties, including all-zero rows.
-            output[start:end] = scores.argmax(dim=-1)
-        start = end
-        request += group_size
+    _kernels().sample_recovered_tokens_kernel_impl(
+        output,
+        cumulative,
+        draft_ids,
+        draft_probs,
+        target_probs,
+        inverse_noise,
+        vocab_size,
+        NO_DRAFT_PROBS,
+    )
