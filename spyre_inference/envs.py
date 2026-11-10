@@ -46,6 +46,7 @@ if TYPE_CHECKING:
     SPYRE_BLOCKED_TRANSPOSE: bool = True
     SPYRE_KERNEL_CACHE: bool = False
     SPYRE_LOGITS_CPU_GATHER: bool = False
+    SPYRE_XPRESS_DEVICE_SELECTION: bool = False
     SPYRE_MAX_NUM_PARTIAL_PREFILLS: int = 1
     SPYRE_MOE_GATHERED_MAX_TOKENS: int = 8
     SPYRE_MOE_CHUNKS: int | None = None
@@ -133,6 +134,9 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # shards are gathered on the CPU. Needs OMP_WAIT_POLICY=PASSIVE (spinning OpenMP
     # threads otherwise slow the next step).
     "SPYRE_LOGITS_CPU_GATHER": lambda: os.getenv("SPYRE_LOGITS_CPU_GATHER", "0") == "1",
+    # Experimental full-vocabulary selection; requires the torch-spyre payload top-k
+    # extension and, for shortlists larger than 128, mask_by_index.
+    "SPYRE_XPRESS_DEVICE_SELECTION": lambda: os.getenv("SPYRE_XPRESS_DEVICE_SELECTION", "0") == "1",
     # Maximum number of sequences allowed to prefill in the same batch. "1" (default)
     # serialises prefills, so a batch spends the whole token budget on one prompt
     # instead of topping itself up with a short chunk of the next. Any non-positive

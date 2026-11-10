@@ -30,10 +30,12 @@ from vllm.model_executor.models.qwen3_dflash import (
 )
 from vllm.model_executor.models.qwen3_xpress import Qwen3XPressForCausalLM, Qwen3XPressModel
 
+from spyre_inference import envs
 from spyre_inference.custom_ops.parallel_lm_head import SpyreUnquantizedLMHeadMethod
 from spyre_inference.custom_ops.utils import convert
 from spyre_inference.v1.attention.backends.spyre_attn import SpyreAttentionImpl, SpyrePagedKVCache
 from spyre_inference.v1.spec_decode.checkpoint import validate_dflash_weights
+from spyre_inference.v1.spec_decode.selection import FP16VocabularySelector
 from spyre_inference.v1.spec_decode.xpress_head import XPressRefinerHead, select_feedback
 from spyre_inference.v1.worker import compile_guard
 
@@ -142,6 +144,17 @@ class SpyreDFlashQwen3ForCausalLM(DFlashQwen3ForCausalLM):
         super().load_weights(weights.items())
 
     def prepare_for_spyre(self) -> None:
+        self._vocabulary_selector = None
+        if envs.SPYRE_XPRESS_DEVICE_SELECTION:
+            if self.xpress_head is None:
+                raise ValueError("Device XPress selection requires an XPress checkpoint")
+            required_ops = ["topkvalue", "topk_payload"]
+            if self.xpress_topc > 128:
+                required_ops.append("mask_by_index")
+            missing = [name for name in required_ops if not hasattr(torch.ops.spyre, name)]
+            if missing:
+                raise RuntimeError(f"Device XPress selection requires torch-spyre ops: {missing}")
+            self._vocabulary_selector = FP16VocabularySelector(self.config.vocab_size)
         self.model.prepare_for_spyre()
         self._combine = torch.compile(self.model.fc, fullgraph=True, dynamic=False)
         for layer in self.model.layers:
@@ -186,19 +199,36 @@ class SpyreDFlashQwen3ForCausalLM(DFlashQwen3ForCausalLM):
         batch = anchor_ids.numel()
         hidden_blocks = hidden_states.view(batch, -1, hidden_states.shape[-1])
         base = self.compute_device_logits(hidden_states).view(batch, hidden_blocks.shape[1], -1)
-        host_base = self._copy_logits_to_cpu(base)[:, 1:, : self.config.vocab_size]
-        draft = self._argmax_on_cpu(host_base)
-        if self.xpress_head is None or not self.xpress_num_passes:
-            return draft.tolist()
-        cache = self._hidden_cache(hidden_blocks)
-        base_c, candidates = host_base.topk(self.xpress_topc, dim=-1)
+        refine = self.xpress_head is not None and self.xpress_num_passes
+        selector = getattr(self, "_vocabulary_selector", None)
+        if selector is None:
+            host_base = self._copy_logits_to_cpu(base)[:, 1:, : self.config.vocab_size]
+            draft = self._argmax_on_cpu(host_base)
+            if not refine:
+                return draft.tolist()
+            cache = self._hidden_cache(hidden_blocks)
+            base_c, candidates = host_base.topk(self.xpress_topc, dim=-1)
+            base = F.pad(base_c, (0, -self.xpress_topc % 64), value=-torch.inf)
+        else:
+            greedy, shortlist = selector(
+                base.flatten(0, 1)[:, : self.config.vocab_size],
+                self.xpress_topc if refine else 0,
+                hidden_blocks.shape[1],
+            )
+            draft = greedy[0].cpu().long() + greedy[1].cpu().long() * 512
+            if not refine:
+                return draft.tolist()
+            cache = self._hidden_cache(hidden_blocks)
+            base, low, high = selector.pack(shortlist, hidden_blocks.shape[1])
+            # Device-generated INT32 indices still need a host layout bridge.
+            candidates = low.cpu().long() + high.cpu().long() * 512
         # BMM padding cannot split flattened candidate embedding rows.
         padding = -self.xpress_topc % 64
         candidate_ids = F.pad(candidates, (0, padding))
-        base_c = F.pad(base_c, (0, padding), value=-torch.inf)
         # Flat indices avoid gather page splits across request axes.
         candidate_ids = convert(candidate_ids.flatten(), device=hidden_states.device)
-        base = convert(base_c, device=hidden_states.device, dtype=hidden_states.dtype)
+        if selector is None:
+            base = convert(base, device=hidden_states.device, dtype=hidden_states.dtype)
         # The anchor is its own predecessor, as in upstream's XPressSpeculator.
         previous = torch.cat((anchor_ids[:, None], anchor_ids[:, None], draft[:, :-1]), dim=1)
         embeddings, feedback, readout = self._prepare_feedback(

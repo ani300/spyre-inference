@@ -113,6 +113,22 @@ This avoids the device integer-layout conversions needed to feed token IDs back
 into an embedding lookup. Direct gathers with device-generated indices remain
 dependent on torch-spyre support.
 
+### Experimental full-vocabulary selection
+
+`SPYRE_XPRESS_DEVICE_SELECTION=1` also runs the initial argmax and shortlist top-k
+on Spyre. This requires `topkvalue` and `topk_payload`; shortlists above 128 also
+require `mask_by_index` for repeated top-128 rounds. The pinned and currently
+rebuilt torch-spyre lack these extensions, so this path remains disabled by
+default and awaits device qualification. Enabling it without the required
+operators fails during model preparation.
+
+Selection supports vocabularies of 128 to 262144 tokens and finite logits with
+at least `xpress_topc` entries above the native mask fill. Scores stay resident;
+token IDs cross the host as exact base-512 FP16 digits before the initial
+embedding gather. Refinement then uses the same device feedback as the default
+path. Native top-k can choose different candidates at tied shortlist boundaries,
+so acceptance and proposals can differ from CPU top-k.
+
 Spyre's V2 runner still lacks model loading, compilation and warmup. After that
 runner is operational, XPress needs its auxiliary-state, draft-context and
 CPU-sampling hooks ported to V2's speculator interface. See
