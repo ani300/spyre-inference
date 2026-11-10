@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
     
     
       
@@ -29,10 +29,10 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -93,7 +93,7 @@
     You are viewing development docs. <a href="https://torch-spyre.github.io/spyre-inference/lateststable/">Click here</a> to view docs for the latest stable release.
   </p>
   <script>
-    if (window.location.pathname.includes('/latest/')) {
+    if (globalThis.location.pathname.includes('/latest/')) {
       document.getElementById('dev-banner').style.display = '';
     }
   </script>
@@ -1149,6 +1149,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../user_guide/speculative_decoding.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Speculative Decoding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1224,6 +1252,34 @@
     
   
     Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/integration-tier.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The Integration Tier
   
 
     
@@ -1730,6 +1786,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../user_guide/speculative_decoding.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Speculative Decoding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1804,6 +1888,34 @@
     
   
     Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/integration-tier.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The Integration Tier
   
 
     
@@ -1967,20 +2079,34 @@
 <li><a href="https://docs.astral.sh/uv/"><code>uv</code></a> package manager</li>
 <li>Access to IBM Spyre hardware with the Spyre Runtime Stack (required for torch-spyre compilation)</li>
 </ul>
+<p>CI provisions the RPM versions in <code>spyre-rpms.lock</code> before building the Python environment.
+On a development pod whose image-baked runtime does not match that lock, install and
+activate the pinned RPMs first (requires access to the configured RPM repository):</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>bash<span class="w"> </span>scripts/install-pinned-rpms.sh<span class="w"> </span>--rebuild
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nb">source</span><span class="w"> </span>~/spyre-libs/env.sh
+</span></code></pre></div>
+<p>The <code>--rebuild</code> option rebuilds torch-spyre against those libraries, clearing uv's
+revision-keyed wheel cache first. After an RPM-only update, <code>uv sync</code> by itself can
+reuse a wheel built against the old libraries. The installer leaves the system
+<code>/opt/ibm/spyre</code> tree unchanged and points the unpacked binaries' hardcoded paths at a
+<code>/tmp/&lt;tag&gt;/spyre</code> symlink to itself. Source its <code>env.sh</code> in each new shell.
+Unlike the Install command below, <code>--rebuild</code> runs
+<code>uv sync --group dev --reinstall-package torch-spyre</code> without <code>--frozen</code> and may update
+<code>uv.lock</code>.</p>
 <h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
 <p>From the repository root, run:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>sync<span class="w"> </span>--frozen
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>sync<span class="w"> </span>--frozen
 </span></code></pre></div>
 <p>This command will:</p>
 <ol>
 <li>Install all project dependencies</li>
 <li>Build vLLM from source with the empty backend (<code>VLLM_TARGET_DEVICE=empty</code>, no device-specific C kernels)</li>
-<li>Build torch-spyre from source</li>
-<li>Install PyTorch 2.13.0 from the CPU-specific index</li>
+<li>Install or reuse the torch-spyre wheel for the pinned source revision (RPMs are provisioned separately)</li>
+<li>Install PyTorch 2.14.1 from the CPU-specific index</li>
 </ol>
 <h2 id="verification">Verification<a class="headerlink" href="#verification" title="Permanent link">&para;</a></h2>
 <p>After installation, verify the plugin is correctly installed:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">"import spyre_inference; print(spyre_inference.__version__)"</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>uv<span class="w"> </span>run<span class="w"> </span>--no-sync<span class="w"> </span>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">"import spyre_inference; print(spyre_inference.__version__)"</span>
 </span></code></pre></div>
 <h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
 <h3 id="build-failures">Build Failures<a class="headerlink" href="#build-failures" title="Permanent link">&para;</a></h3>
@@ -2049,10 +2175,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "content.tabs.link", "navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.top", "search.highlight", "search.share", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "content.tabs.link", "navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.top", "search.highlight", "search.share", "toc.follow"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   </body>

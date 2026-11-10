@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
     
     
       
@@ -29,10 +29,10 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -93,7 +93,7 @@
     You are viewing development docs. <a href="https://torch-spyre.github.io/spyre-inference/lateststable/">Click here</a> to view docs for the latest stable release.
   </p>
   <script>
-    if (window.location.pathname.includes('/latest/')) {
+    if (globalThis.location.pathname.includes('/latest/')) {
       document.getElementById('dev-banner').style.display = '';
     }
   </script>
@@ -1057,6 +1057,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#gemma-4-per-request-image-sizes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gemma-4: per-request image sizes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#decoder-compile-buckets" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1083,6 +1094,73 @@
     <span class="md-ellipsis">
       
         Tuning buckets for padding
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tuning buckets for padding">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#choosing-a-kv-ladder" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choosing a KV ladder
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Choosing a KV ladder">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-denser-ladder-for-large-batches-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A denser ladder for large batches only
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kv-cache-size" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        KV cache size
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fp8-kv-cache" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FP8 KV cache
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#offline-engine-in-the-calling-process" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Offline engine in the calling process
       
     </span>
   </a>
@@ -1204,6 +1282,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="speculative_decoding.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Speculative Decoding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1279,6 +1385,34 @@
     
   
     Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/integration-tier.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The Integration Tier
   
 
     
@@ -1693,6 +1827,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#gemma-4-per-request-image-sizes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gemma-4: per-request image sizes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#decoder-compile-buckets" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1719,6 +1864,73 @@
     <span class="md-ellipsis">
       
         Tuning buckets for padding
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tuning buckets for padding">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#choosing-a-kv-ladder" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choosing a KV ladder
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Choosing a KV ladder">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-denser-ladder-for-large-batches-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A denser ladder for large batches only
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kv-cache-size" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        KV cache size
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fp8-kv-cache" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FP8 KV cache
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#offline-engine-in-the-calling-process" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Offline engine in the calling process
       
     </span>
   </a>
@@ -1840,6 +2052,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="speculative_decoding.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Speculative Decoding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1914,6 +2154,34 @@
     
   
     Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/integration-tier.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The Integration Tier
   
 
     
@@ -2022,6 +2290,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#gemma-4-per-request-image-sizes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gemma-4: per-request image sizes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#decoder-compile-buckets" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2048,6 +2327,73 @@
     <span class="md-ellipsis">
       
         Tuning buckets for padding
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tuning buckets for padding">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#choosing-a-kv-ladder" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choosing a KV ladder
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Choosing a KV ladder">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-denser-ladder-for-large-batches-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A denser ladder for large batches only
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kv-cache-size" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        KV cache size
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fp8-kv-cache" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FP8 KV cache
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#offline-engine-in-the-calling-process" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Offline engine in the calling process
       
     </span>
   </a>
@@ -2127,10 +2473,12 @@
 <h1 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h1>
 <h2 id="plugin-setup">Plugin Setup<a class="headerlink" href="#plugin-setup" title="Permanent link">&para;</a></h2>
 <p>To load the plugin, set the <code>VLLM_PLUGINS</code> environment variable before running vLLM:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">VLLM_PLUGINS</span><span class="o">=</span>spyre_inference,spyre_inference_ops
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">VLLM_PLUGINS</span><span class="o">=</span>spyre_inference
 </span></code></pre></div>
-<p><code>spyre_inference</code> activates the platform, and <code>spyre_inference_ops</code> registers the OOT
-custom ops plus the Spyre Transformers backend (used for <code>model_impl="transformers"</code>).</p>
+<p><code>spyre_inference</code> names both the platform plugin and the general plugin: the first
+activates the platform, and the second registers the OOT custom ops and the Spyre
+model adaptations, including the Spyre Transformers backend (used for
+<code>model_impl="transformers"</code>).</p>
 <h2 id="usage">Usage<a class="headerlink" href="#usage" title="Permanent link">&para;</a></h2>
 <p>You can then use vLLM as usual:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">vllm</span><span class="w"> </span><span class="kn">import</span> <span class="n">LLM</span>
@@ -2156,6 +2504,26 @@ tower — weights to load and graphs to warm up that a text-only workload never 
 <p>That is also the configuration the tensor-parallel and compile e2e tests run these
 checkpoints under. A repository with no vision tower gets the override by default, so
 this is only needed for the multimodal ones.</p>
+<h2 id="gemma-4-per-request-image-sizes">Gemma-4: per-request image sizes<a class="headerlink" href="#gemma-4-per-request-image-sizes" title="Permanent link">&para;</a></h2>
+<p>The vision tower is compiled per token budget at warmup, for the image size the engine runs
+at: <code>max_soft_tokens</code> from <code>--mm-processor-kwargs</code>, default 280. A request can ask for a
+larger size (560 or 1120) in its own <code>mm_processor_kwargs</code>: offline through <code>LLM.chat</code> or
+<code>LLM.generate</code>, and online only when the server runs with <code>--trust-request-mm-kwargs</code>.</p>
+<p>Each larger size needs its own budget, compiled at warmup, so they are opt-in through
+<code>encoder_cudagraph_token_budgets</code>. To serve requests up to 1120:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>vllm<span class="w"> </span>serve<span class="w"> </span>google/gemma-4-26B-A4B-it<span class="w"> </span>--tensor-parallel-size<span class="w"> </span><span class="m">4</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>--trust-request-mm-kwargs<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span>-cc<span class="w"> </span><span class="s1">'{"encoder_cudagraph_token_budgets": [64, 128, 256, 280, 576, 1152]}'</span>
+</span></code></pre></div>
+<p>The list replaces the default budgets, so keep the small ones in it: 64 to 280 cover the
+engine's own 280, 576 covers 560 and 1152 covers 1120. Each budget is rounded up to a whole
+patch group. An image larger than the largest entry, as listed, is rejected with a 400
+(<code>VLLMValidationError</code> offline) rather than compiled mid-request, and the encoder cache is
+raised to hold one at that size. An entry above <code>max_num_batched_tokens</code> (512 unless
+<code>--max-num-batched-tokens</code> sets it) needs chunked MM input, so <code>--disable-chunked-mm-input</code>
+with it fails at startup.
+Raising the engine-wide <code>--mm-processor-kwargs '{"max_soft_tokens": 560}'</code> instead makes
+every image that size.</p>
 <h2 id="decoder-compile-buckets">Decoder compile buckets<a class="headerlink" href="#decoder-compile-buckets" title="Permanent link">&para;</a></h2>
 <p>The body pads the packed token count to the next <code>compile_sizes</code> bucket, and warmup
 dummies every bucket. The lm_head sits outside every body graph and compiles its own, so
@@ -2165,89 +2533,262 @@ pad onto the same buckets clipped to <code>--max-num-seqs</code>, and warmup pro
 no shape reaches the lm_head uncompiled. Pad rows are dropped before sampling.</p>
 <h2 id="encoder-pooling-compile-buckets">Encoder / pooling compile buckets<a class="headerlink" href="#encoder-pooling-compile-buckets" title="Permanent link">&para;</a></h2>
 <p>Spyre compile is on by default (<code>STOCK_TORCH_COMPILE</code>, <code>dynamic=False</code>). Pass
-<code>--enforce-eager</code> to disable it. Body and attention are bucketed independently:</p>
+<code>--enforce-eager</code> to disable it.</p>
+<p>Everything derives from one number, <code>R</code> — the token budget. It is
+<code>--max-num-batched-tokens</code>, capped at 2048 (the measured throughput argmax across
+pooling models), floored at <code>--max-model-len</code> rounded up to a power-of-two multiple of
+64, and capped again at what <code>--max-num-seqs</code> sequences of that length could carry, then
+floored to a whole multiple of it so that every length divides <code>R</code>. <code>--max-num-seqs</code> is
+then lowered to <code>R / 64</code> if it was higher, since no batch wider than that fits.</p>
 <ul>
-<li><strong>Body</strong> (Linear / LN): pad the packed token count to the next 1D
-  <code>compile_sizes</code> bucket <code>T</code> (same dispatch as the decoder).</li>
-<li><strong>Attention</strong> (SDPA): gather into a dense <code>(B, L)</code> grid. This is the Spyre
-  workaround until flash-style attention lands; the body is not rewritten to
-  <code>T = B × L</code>.</li>
+<li><strong>Body</strong> (Linear / LN): one shape, <code>R</code> rows. Every pooling step pads to it.
+  Fixing it is what keeps the attention kernels keyed on sequence shapes alone.</li>
+<li><strong>Lengths</strong>: powers of two from 64 (one Spyre stick) up to <code>--max-model-len</code>, rounded
+  up to a power-of-two multiple of 64. Every length is then <code>64 * 2^k</code>, so each divides
+  <code>R</code> and each rectangle covers the body exactly. <code>SPYRE_ATTN_QUERY_BUCKETS</code> overrides the
+  ladder, rounded the same way.</li>
+<li><strong>Attention, rectangular path</strong>: for each length <code>L</code>, one rectangle <code>B = R / L</code>. The
+  runner pads every sequence to <code>L</code> and the batch to <code>B</code>, so Q/K/V <em>are</em> the grid:
+  one reshape, one <code>F.scaled_dot_product_attention</code>, one store, no data movement
+  inside the layer. Taken whenever <code>num_seqs &lt;= B</code>.</li>
+<li><strong>Attention, ragged path</strong>: for a batch too wide for any rectangle, Q/K/V stay
+  packed and requests are split into <em>groups</em> — the requests sharing one padded
+  length. Each group is one fused gather/attend/scatter keyed on <code>(group width,
+  extent)</code>, so a ragged step makes one kernel call per group rather than per
+  request. Widths are powers of two up to <code>B</code>; a wider group is chunked into
+  descending powers of two.</li>
 </ul>
-<p><code>compile_sizes</code> for pooling is the body <code>T</code> buckets (<code>64, 128, …</code> up to the
-token cap). Attention <code>L</code> comes from <code>--max-model-len</code> (<code>64, 128, …</code>).
-Attention <code>B</code> is powers of two up to <code>--max-num-seqs</code> (same as decoder).</p>
-<p>A 3-seq × 30-token request with <code>--max-num-seqs 4</code> pads the body to <code>T=128</code>
-and attention to <code>(B=4, L=64)</code>. Masks and pooling still use the real lengths.</p>
-<p>Compiled pooling warmup dummies 1D body sizes, then each attention <code>(B, L)</code>
-at full size. Eager pooling uses one short dummy, then runtime still
-1D-pads the body.</p>
+<p>With <code>--max-model-len 512 --max-num-seqs 32 --max-num-batched-tokens 2048</code> that is
+23 shapes: one body, four rectangles (<code>(64,32) (128,16) (256,8) (512,4)</code>, each
+exactly 2048 rows), and 18 group pairs. At <code>--max-num-seqs 4</code> the group family is
+empty — no batch that narrow can miss the rectangular path — leaving five shapes.
+Those counts assume the rectangular path is opaque; traced into the block graph (see
+below), each rectangle is a block graph of its own rather than an attention kernel.</p>
+<p>The choice is made once per step from the step's metadata, before the forward, and the
+runner counts it in <code>spyre_encoder_stats</code> (<code>rect_steps</code> / <code>ragged_steps</code>). The
+ragged path always runs behind the opaque attention op. When compiled and the head size
+fills whole 64-element sticks, the rectangular path is traced into the block graph
+instead, so each rectangle is its own block graph. In eager mode both paths stay
+opaque, with no block graph; a compiled, unpadded sub-stick head size also keeps
+both paths opaque, sharing one block graph. Pooling models such as granite-30m
+pad their native 32-wide heads to 64 before construction.</p>
+<p>Compiled pooling warmup runs one dummy at the body shape. With the rectangular path
+opaque, the first attention call in it traces every declared rectangle and group pair,
+against that call's own tensors (a Spyre tensor's device layout is part of its cache
+key). With it traced in, warmup adds one dummy per rectangle, plus one forced onto the
+ragged path (when any group is reachable) that traces the group pairs. Eager pooling
+uses one short dummy and always takes the packed path.</p>
 <p>Example:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>vllm<span class="w"> </span>serve<span class="w"> </span>ibm-granite/granite-embedding-125m-english<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>--runner<span class="w"> </span>pooling<span class="w"> </span>--max-num-seqs<span class="w"> </span><span class="m">4</span><span class="w"> </span>--max-model-len<span class="w"> </span><span class="m">512</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>vllm<span class="w"> </span>serve<span class="w"> </span>ibm-granite/granite-embedding-125m-english<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span>--runner<span class="w"> </span>pooling<span class="w"> </span>--max-num-seqs<span class="w"> </span><span class="m">4</span><span class="w"> </span>--max-model-len<span class="w"> </span><span class="m">512</span>
 </span></code></pre></div>
 <h2 id="tuning-buckets-for-padding">Tuning buckets for padding<a class="headerlink" href="#tuning-buckets-for-padding" title="Permanent link">&para;</a></h2>
 <p>Bucketing trades warmup time for per-request padding. A request is padded up to the next
 bucket on each axis and the padding is masked out, so buckets far above your real shapes
 waste compute, while buckets that hug your workload cut that waste but add graphs to
-compile at warmup. Attention is recorded as the <strong>product</strong> of its KV-length and
-query-length buckets (and, when the batched-decode kernel is enabled, a second KV-length ×
-num-sequences product), so extra attention buckets cost multiplicatively — keep those
-lists short.</p>
+compile at warmup. Per-sequence attention pairs each query bucket only with KV buckets
+that fit its smallest real query length. Batched decode uses KV-length/num-sequences
+pairs; both recording paths also enforce the allocated page-capacity limit. Extra
+buckets can still multiply the recorded variants, so keep those lists short.</p>
 <p><strong>Decoder body (packed token count).</strong> Override the defaults with <code>compile_sizes</code>; the
 platform clamps <code>--max-num-batched-tokens</code> to the largest entry. A decode-heavy run at
 <code>--max-num-seqs 8</code> rarely needs the full power-of-two ladder:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">vllm</span><span class="w"> </span><span class="kn">import</span> <span class="n">LLM</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">llm</span> <span class="o">=</span> <span class="n">LLM</span><span class="p">(</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">"ibm-ai-platform/micro-g3.3-8b-instruct-1b"</span><span class="p">,</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="n">max_num_seqs</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="n">max_model_len</span><span class="o">=</span><span class="mi">2048</span><span class="p">,</span>
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    <span class="n">compilation_config</span><span class="o">=</span><span class="p">{</span><span class="s2">"compile_sizes"</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">512</span><span class="p">]},</span>
-</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">vllm</span><span class="w"> </span><span class="kn">import</span> <span class="n">LLM</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">llm</span> <span class="o">=</span> <span class="n">LLM</span><span class="p">(</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">"ibm-ai-platform/micro-g3.3-8b-instruct-1b"</span><span class="p">,</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="n">max_num_seqs</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="n">max_model_len</span><span class="o">=</span><span class="mi">2048</span><span class="p">,</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="n">compilation_config</span><span class="o">=</span><span class="p">{</span><span class="s2">"compile_sizes"</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">512</span><span class="p">]},</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="p">)</span>
 </span></code></pre></div>
 <p><code>1</code> and <code>8</code> cover decode steps (one token per running sequence, up to 8); <code>512</code> is the
 prefill bucket.</p>
+<p>The default prefill bucket is 512 tokens, but larger ones compile. For prompts of many
+thousands of tokens, a 1024-token prefill chunk shortens time to first token, on dense
+models such as granite-3.3-8b as well as on MoE models such as gemma-4, where each
+prefill step reads every expert's weights however many tokens it carries. Pass a larger
+<code>--max-num-batched-tokens</code> to get one; the default buckets then keep <code>512</code> too, so short
+prefills don't pad up to the larger one:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>vllm<span class="w"> </span>serve<span class="w"> </span>google/gemma-4-26B-A4B<span class="w"> </span>-tp<span class="w"> </span><span class="m">4</span><span class="w"> </span>--max-model-len<span class="w"> </span><span class="m">32768</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">    </span>--max-num-batched-tokens<span class="w"> </span><span class="m">1024</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">    </span>--limit-mm-per-prompt<span class="w"> </span><span class="s1">'{"image": 0, "video": 0, "audio": 0}'</span>
+</span></code></pre></div>
+<p>Warmup takes longer, and for prompts under a few thousand tokens it gains little; decode
+can get slightly slower. The example serves text only: a larger token budget also raises
+the number of image-batch widths the vision tower is warmed at, which can run out of
+device memory (#1302). At a long <code>--max-model-len</code>, a 2048-token bucket can push the
+largest attention variants past torch-spyre's 60 s backend compile limit at warmup, so
+they are left to compile on first use (torch-spyre#5250 makes that limit configurable).</p>
 <p><strong>Attention (KV length × query length).</strong> Set the buckets directly as comma-separated
 lists. Each is clamped to its limit: entries above <code>--max-model-len</code> (KV) or
 <code>--max-num-batched-tokens</code> (query) are dropped, and the limit is appended if missing, so
 every schedulable length keeps a bucket.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">SPYRE_ATTN_KV_BUCKETS</span><span class="o">=</span><span class="m">256</span>,1024,2048<span class="w">    </span><span class="c1"># default: powers of two from block_size</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">SPYRE_ATTN_QUERY_BUCKETS</span><span class="o">=</span><span class="m">1</span>,512<span class="w">         </span><span class="c1"># 1 = decode; 512 = prefill chunk</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">SPYRE_ATTN_KV_BUCKETS</span><span class="o">=</span><span class="m">256</span>,1024,2048<span class="w">    </span><span class="c1"># default: the SPYRE_ATTN_KV_LADDER preset (pow2)</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">SPYRE_ATTN_QUERY_BUCKETS</span><span class="o">=</span><span class="m">1</span>,512<span class="w">         </span><span class="c1"># 1 = decode; 512 = prefill chunk</span>
 </span></code></pre></div>
-<p>The default KV buckets are geometric (powers of two) precisely because the recorded set
-is a product. If your context never exceeds 2048, dropping the higher powers removes
-variants from warmup at no serving cost.</p>
-<p>With the batched-decode kernel enabled (<code>SPYRE_BATCHED_DECODE=1</code>, the default; the
-head-major layout has no batched kernel and ignores it), warmup also records it over the
-KV-length × num-sequences grid. <code>SPYRE_ATTN_NUM_SEQS_BUCKETS</code>
-(default: powers of two from 4 to <code>--max-num-seqs</code>) is the extra lever there, and the same
-keep-it-short advice applies.</p>
+<p>The default KV buckets are the powers of two from <code>block_size</code>; the denser presets below
+union them with a further series. The ladder stays geometric rather than uniform because the
+recorded set grows with both the KV and num-sequences axes, even after filtering, so each
+extra entry costs warmup time. If your context never exceeds 2048,
+dropping the higher entries removes variants from warmup at no serving cost.</p>
+<h3 id="choosing-a-kv-ladder">Choosing a KV ladder<a class="headerlink" href="#choosing-a-kv-ladder" title="Permanent link">&para;</a></h3>
+<p><code>SPYRE_ATTN_KV_LADDER</code> picks how finely the KV ladder subdivides, without having to write the
+buckets out. The default is <code>pow2</code>. Every preset keeps the powers of two, so a KV length's bucket
+can only move down relative to <code>pow2</code>, never up. The denser presets do not contain each other,
+though: at block_size 128, 2600 rounds to 2688 under <code>8_5</code> but to 2944 under <code>4_3</code>. Counts and
+overpay below are for block_size 128, at the <code>--max-model-len</code> each column names:</p>
+<table>
+<thead>
+<tr>
+<th>preset</th>
+<th>spacing</th>
+<th>buckets at 4096 / 16384 / 32768</th>
+<th>mean overpay at 4096 / 32768</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pow2</code> (default)</td>
+<td>powers of two only</td>
+<td>6 / 8 / 9</td>
+<td>39% / 39%</td>
+</tr>
+<tr>
+<td><code>8_5</code></td>
+<td>8/5 ratio</td>
+<td>10 / 15 / 18</td>
+<td>21% / 19%</td>
+</tr>
+<tr>
+<td><code>4_3</code></td>
+<td>4/3 ratio</td>
+<td>14 / 20 / 24</td>
+<td>15% / 13%</td>
+</tr>
+<tr>
+<td><code>9_8</code></td>
+<td>9/8 ratio</td>
+<td>20 / 34 / 41</td>
+<td>8% / 6%</td>
+</tr>
+<tr>
+<td><code>uniform</code></td>
+<td>odd sixteenths of <code>--max-model-len</code></td>
+<td>13 / 15 / 16</td>
+<td>14% / 14%</td>
+</tr>
+</tbody>
+</table>
+<p>Overpay is the bucket over the real KV length, averaged over every KV length above <code>block_size</code>,
+so it describes a workload whose lengths are spread out. Warmup cost tracks the number of distinct
+recorded kernels, which rises with the bucket count. The ratio presets put their buckets at fixed
+token counts; <code>uniform</code> places them as fractions of <code>--max-model-len</code>, so its buckets move up with
+the context while its count stays roughly flat. Short contexts that are not a power of two are the
+exception: there the step rounds down to a whole block and adds a few buckets (16 at 2047 against
+12 at 2048). Match <code>--max-model-len</code> to your real lengths before choosing it.</p>
+<p>As a rule of thumb, a denser preset pays off with long KV lengths and large batches, because the
+saving is a number of KV tokens per sequence per decode step; at short lengths or a few sequences
+it buys little for its warmup. Once the block count exceeds one chunk of <code>32 // num_seqs</code> blocks,
+the batched-decode kernel also pads it up to whole chunks, which takes back part of a denser
+preset's saving below 32 sequences. <code>8_5</code> is the recommended compromise, <code>9_8</code> the fastest when
+warmup time does not matter, and <code>pow2</code> the default because it has the shortest warmup.</p>
+<p>If the KV lengths are known and clustered, <code>SPYRE_ATTN_KV_BUCKETS</code> beats every preset: put the
+buckets where the lengths actually are. A workload that sits on one power of two gains nothing
+from any preset.</p>
+<h4 id="a-denser-ladder-for-large-batches-only">A denser ladder for large batches only<a class="headerlink" href="#a-denser-ladder-for-large-batches-only" title="Permanent link">&para;</a></h4>
+<p>A denser ladder pays off in proportion to the tokens it saves times the batch size, so its gain
+concentrates at large batches. <code>SPYRE_ATTN_KV_LADDER_LARGE_BATCH</code> names a second preset that
+batched decode uses once the batch's num-sequences bucket reaches <code>SPYRE_ATTN_LARGE_BATCH_MIN_SEQS</code>
+(default 16, which with the default buckets means 9 or more sequences), while the per-sequence
+path and smaller batches keep <code>SPYRE_ATTN_KV_LADDER</code>. Below the threshold the dense buckets
+cost warmup without a measured gain. The second ladder is unioned with the first, so no length
+rounds up further.
+It is off by default, rejected at startup together with <code>SPYRE_ATTN_KV_BUCKETS</code>, which replaces
+the ladder it extends, and ignored with a warning when the threshold is above the largest
+num-sequences bucket. <code>SPYRE_ATTN_KV_LADDER=8_5</code> with
+<code>SPYRE_ATTN_KV_LADDER_LARGE_BATCH=9_8</code> gets close to plain <code>9_8</code> at large batches for noticeably
+less warmup.</p>
+<p>With the batched-decode kernel enabled (<code>SPYRE_BATCHED_DECODE=1</code>, the default), warmup
+records eligible KV-length × num-sequences combinations.
+<code>SPYRE_ATTN_NUM_SEQS_BUCKETS</code> (default: powers of two from 1 to <code>--max-num-seqs</code>) is the
+extra lever there, and the same keep-it-short advice applies.</p>
+<h2 id="kv-cache-size">KV cache size<a class="headerlink" href="#kv-cache-size" title="Permanent link">&para;</a></h2>
+<p>The KV cache is sized by vLLM's own GPU worker code: after the weights load, it reads the
+card's free memory (<code>torch.accelerator.get_memory_info</code>) and gives the KV cache what is
+left of <code>--gpu-memory-utilization</code> (default 0.92) × total. The cache keeps every block
+that memory pays for, usually far more than <code>--max-num-seqs</code> requests at <code>--max-model-len</code>
+need; with prefix caching on, the spare blocks keep earlier prompts' KV for reuse.</p>
+<p>Each Spyre layer allocates its own page per block, so the budget is converted into blocks
+at the device cost of all layers' pages. That is more than vLLM's shared pool counts when
+groups would overlay one buffer, as a Mamba hybrid's do. Every layer's K and V pages are
+one tensor each, and the Spyre allocator never splits a tensor across its 16 GiB memory
+regions, so a model with few layers gets fewer blocks than its budget: they must still pack
+into the regions. When memory runs out before a full batch fits, a warning names the knobs,
+and requests wait for pages instead of all running at full length.</p>
+<p>The profile run is skipped, as the first forward on Spyre would trace the model before
+the KV cache exists: a forward's activations come out of the <code>1 - --gpu-memory-utilization</code>
+headroom. Lower it if a forward fails to allocate. <code>--kv-cache-memory-bytes</code> skips the
+measurement; <code>--num-gpu-blocks-override</code> replaces the block count it yields, so the
+warning above checks the override instead. <code>VLLM_CPU_KVCACHE_SPACE</code>, which sets the
+KV cache size on vLLM's CPU backend, is ignored, with a warning when it is set to a size;
+setting it to a size next to <code>--kv-cache-memory-bytes</code> is an error.</p>
+<h2 id="fp8-kv-cache">FP8 KV cache<a class="headerlink" href="#fp8-kv-cache" title="Permanent link">&para;</a></h2>
+<p>Pass <code>--kv-cache-dtype fp8</code> to store the KV cache in float8 (e4m3), halving the bytes
+each cached token takes:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>vllm<span class="w"> </span>serve<span class="w"> </span>ibm-granite/granite-4.1-8b-fp8<span class="w"> </span>--kv-cache-dtype<span class="w"> </span>fp8
+</span></code></pre></div>
+<p>It needs a head size that is a multiple of 128. Other quantized cache dtypes (<code>fp8_e5m2</code>, <code>fp8_inc</code>, <code>nvfp4</code>,
+...) are rejected at startup. Since the KV cache is sized from free device memory (see
+<a href="#kv-cache-size">KV cache size</a>), an fp8 cache fits twice the tokens of an fp16 one.
+Attention still computes in the model dtype: pages are dequantized on read with the
+checkpoint's per-layer KV scales, or 1.0 when it has none. The speedup grows with the number of cached tokens each decode step
+reads, so it is small at short contexts; check accuracy against an fp16 cache before
+relying on it.</p>
+<p>The scales are compiled into the graphs as constants. A checkpoint whose layers carry
+different KV scales therefore compiles the transformer block and each recorded attention
+kernel once per distinct pair of scales, which lengthens warmup; one without scales
+compiles them once, as an fp16 cache does.</p>
+<h2 id="offline-engine-in-the-calling-process">Offline engine in the calling process<a class="headerlink" href="#offline-engine-in-the-calling-process" title="Permanent link">&para;</a></h2>
+<p>At <code>tensor_parallel_size=1</code>, set <code>VLLM_ENABLE_V1_MULTIPROCESSING=0</code> to run the offline
+<code>LLM</code> engine in the calling process instead of a spawned EngineCore, which skips the
+spawn and the second round of imports at startup. <code>vllm serve</code> always spawns EngineCore.</p>
+<p>The engine then changes the calling process: vLLM freezes the garbage collector's heap,
+caches its environment variables, seeds the global RNGs and leaves <code>RANK</code>/<code>WORLD_SIZE</code>
+set, the worker sets torch's thread count, and the card stays open until the process
+exits. Build an engine with <code>tensor_parallel_size &gt; 1</code> in a new process. Set
+<code>OMP_WAIT_POLICY=PASSIVE</code> before Python starts: OpenMP reads it when it loads, so the
+default the plugin sets only reaches spawned processes.</p>
 <h2 id="pyprojecttoml-reference">pyproject.toml Reference<a class="headerlink" href="#pyprojecttoml-reference" title="Permanent link">&para;</a></h2>
 <p>The <code>pyproject.toml</code> includes several key build configurations:</p>
 <h3 id="build-configuration">Build Configuration<a class="headerlink" href="#build-configuration" title="Permanent link">&para;</a></h3>
-<div class="language-toml highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">[tool.uv]</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">build-constraint-dependencies</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"torch==2.13.0"</span><span class="p">]</span>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">extra-build-variables</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">vllm</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">VLLM_TARGET_DEVICE</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"empty"</span><span class="p">,</span><span class="w"> </span><span class="n">CMAKE_ARGS</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"--fresh"</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="k">[tool.uv.extra-build-variables.vllm]</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">VLLM_TARGET_DEVICE</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"empty"</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="n">CMAKE_ARGS</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"--fresh"</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="k">[tool.uv.extra-build-dependencies]</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="n">torch-spyre</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"torch==2.14.1"</span><span class="p">]</span>
 </span></code></pre></div>
 <p>These settings ensure:</p>
 <ul>
-<li>All packages are built with the same PyTorch version (2.13.0)</li>
+<li>torch-spyre is built against the same PyTorch version (2.14.1) the runtime pins, so its
+  C++ extension cannot drift in ABI</li>
 <li>vLLM is built with the <strong>empty</strong> backend — no device-specific C kernels. This avoids
   the torch-version coupling of prebuilt CPU wheels and the dependency on <code>vllm._C</code>
   (whose CPU-optimized ops we don't need; Spyre provides its own)</li>
 </ul>
 <h3 id="source-repositories">Source Repositories<a class="headerlink" href="#source-repositories" title="Permanent link">&para;</a></h3>
 <p>The plugin pulls dependencies from specific Git repositories:</p>
-<div class="language-toml highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">[tool.uv.sources]</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">vllm</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">git</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"https://github.com/vllm-project/vllm"</span><span class="p">,</span><span class="w"> </span><span class="n">rev</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"..."</span><span class="w"> </span><span class="p">}</span>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">torch-spyre</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">git</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"https://github.com/torch-spyre/torch-spyre"</span><span class="p">,</span><span class="w"> </span><span class="n">rev</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"..."</span><span class="w"> </span><span class="p">}</span>
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="k">[tool.uv.sources]</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="n">vllm</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">git</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"https://github.com/vllm-project/vllm"</span><span class="p">,</span><span class="w"> </span><span class="n">rev</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"..."</span><span class="w"> </span><span class="p">}</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="n">torch-spyre</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">git</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"https://github.com/torch-spyre/torch-spyre"</span><span class="p">,</span><span class="w"> </span><span class="n">rev</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"..."</span><span class="w"> </span><span class="p">}</span>
 </span></code></pre></div>
 <p>This ensures that torch-spyre and vllm are compiled/installed from source, instead of pulling pre-compiled wheels from PyPI.</p>
 <h3 id="pytorch-cpu-index">PyTorch CPU Index<a class="headerlink" href="#pytorch-cpu-index" title="Permanent link">&para;</a></h3>
-<div class="language-toml highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">[[tool.uv.index]]</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"pytorch-cpu"</span>
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"https://download.pytorch.org/whl/cpu"</span>
-</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="n">explicit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="k">[[tool.uv.index]]</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"pytorch-cpu"</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"https://download.pytorch.org/whl/cpu"</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="n">explicit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
 </span></code></pre></div>
 <p>This ensures the CPU flavor of PyTorch is installed, as CUDA support is not required.</p>
 
@@ -2309,10 +2850,10 @@ keep-it-short advice applies.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "content.tabs.link", "navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.top", "search.highlight", "search.share", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "content.tabs.link", "navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.top", "search.highlight", "search.share", "toc.follow"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   </body>
