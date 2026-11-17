@@ -535,6 +535,65 @@ def _apply(layer, tokens):
     return method.apply_monolithic(layer, torch.zeros(tokens, HIDDEN), torch.zeros(tokens, EXPERTS))
 
 
+@pytest.mark.parametrize(
+    ("mode", "tokens", "region"),
+    [
+        ("sparse_prefill", 1, "gathered"),
+        ("sparse_prefill", 512, "sparse_prefill"),
+        ("sparse", 1, "sparse_decode"),
+        ("sparse", 32, "sparse_decode"),
+        ("sparse", 512, "sparse_prefill"),
+    ],
+)
+def test_sparse_moe_dispatch(monkeypatch, mode, tokens, region):
+    calls, resets = _dispatch_recorder(monkeypatch)
+    layer = _dispatch_layer("full_softmax")
+    layer.spyre_moe_impl = mode
+    _apply(layer, tokens)
+    assert calls == [(region, "_gathered" if region == "gathered" else "_sparse")]
+    assert resets == []
+
+
+@pytest.mark.parametrize(
+    ("mode", "tokens", "decode"),
+    [("sparse_prefill", 512, False), ("sparse", 32, True), ("sparse", 512, False)],
+)
+def test_sparse_moe_traced_dispatch(monkeypatch, mode, tokens, decode):
+    from spyre_inference import moe as moe_module
+
+    monkeypatch.setattr(torch.compiler, "is_compiling", lambda: True)
+    monkeypatch.setattr(moe_module, "_region", lambda *args: pytest.fail("entered a region"))
+    monkeypatch.setattr(
+        moe_module, "_compiler_scopes", lambda: pytest.fail("entered compiler scopes")
+    )
+    calls = []
+
+    def sparse(layer, x, logits, is_decode):
+        calls.append(is_decode)
+        return x + 1
+
+    monkeypatch.setattr(moe_module, "_sparse", sparse)
+    layer = _dispatch_layer("full_softmax")
+    layer.spyre_moe_impl = mode
+    actual = _apply(layer, tokens)
+    torch.testing.assert_close(actual, torch.ones(tokens, HIDDEN))
+    assert calls == [decode]
+
+
+@pytest.mark.parametrize("mode", ["sparse_prefill", "sparse"])
+@pytest.mark.parametrize("activation, has_bias", [("silu", True), ("swigluoai", False)])
+def test_sparse_moe_rejects_unsupported_expert_semantics(monkeypatch, mode, activation, has_bias):
+    from spyre_inference import envs
+    from spyre_inference.moe import SpyreMoERecipe, configure_spyre_moe_layer
+
+    monkeypatch.setitem(envs._cache, "SPYRE_MOE_IMPL", mode)
+    layer = _generic_layer(
+        moe_config={"has_bias": has_bias}, activation=SimpleNamespace(value=activation)
+    )
+    with pytest.raises(NotImplementedError, match="bias-free SiLU or GELU"):
+        configure_spyre_moe_layer(layer, SpyreMoERecipe(activation, "topk_softmax"))
+
+
 def test_single_token_dispatches_to_the_gathered_form(monkeypatch):
     """One token takes the gathered region, whose combine is the only legal layout there."""
     calls, resets = _dispatch_recorder(monkeypatch)

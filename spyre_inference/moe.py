@@ -67,6 +67,9 @@ if TYPE_CHECKING:
         spyre_moe_chunk_scale: torch.Tensor
         spyre_moe_chunk_offsets: torch.Tensor
         spyre_moe_route_identity: torch.Tensor
+        spyre_moe_token_ids: torch.Tensor
+        spyre_moe_expert_ids: torch.Tensor
+        spyre_moe_impl: str
 
 
 logger = init_logger(__name__)
@@ -185,11 +188,16 @@ def configure_spyre_moe_layer(layer: _RoutedExperts, recipe: SpyreMoERecipe) -> 
     double MoE weight memory, so unsupported configurations must be rejected here.
     """
     moe = layer.moe_config
+    mode = envs.SPYRE_MOE_IMPL
+    if mode not in ("current", "sparse_prefill", "sparse"):
+        raise ValueError(f"invalid SPYRE_MOE_IMPL: {mode!r}")
     _validate_recipe(layer, recipe)
     if not isinstance(layer.quant_method, UnquantizedFusedMoEMethod):
         raise NotImplementedError("Spyre MoE backend does not support quantized experts.")
     if moe.is_lora_enabled:
         raise NotImplementedError("Spyre MoE backend does not support LoRA experts.")
+    if mode != "current" and (moe.has_bias or recipe.activation == "swigluoai"):
+        raise NotImplementedError("RFC 48 sparse MoE requires bias-free SiLU or GELU experts.")
     parallel = moe.moe_parallel_config
     # TP only narrows each expert's ``M``, and MoERunner all-reduces the partial sums.
     # The other axes would split the expert stacks the regions hold whole.
@@ -240,6 +248,7 @@ def configure_spyre_moe_layer(layer: _RoutedExperts, recipe: SpyreMoERecipe) -> 
             )
     layer = cast("RoutedExperts", layer)
     layer.spyre_moe_recipe = recipe
+    layer.spyre_moe_impl = mode
     layer.spyre_moe_regions = {}
 
 
@@ -609,6 +618,44 @@ def _experts(layer: RoutedExperts, x: torch.Tensor, route: torch.Tensor) -> torc
         layer.spyre_moe_down,
         layer.spyre_moe_recipe.activation,
         layer.spyre_moe_biases,
+    )
+
+
+def _sparse(
+    layer: RoutedExperts, x: torch.Tensor, router_logits: torch.Tensor, decode: bool
+) -> torch.Tensor:
+    from spyre_inference.sparse_moe import sparse_decode, sparse_prefill
+
+    recipe = layer.spyre_moe_recipe
+    if recipe.routing == "full_softmax":
+        reduce_dtype = (
+            router_logits.dtype if torch.compiler.is_compiling() else layer.spyre_moe_route_dtype
+        )
+        probs = _probs(router_logits, reduce_dtype)
+        _, indices = _topk(probs, layer.top_k)
+        score = torch.ops.spyre.keep_by_index(
+            probs,  # ty: ignore[invalid-argument-type]
+            indices,  # ty: ignore[invalid-argument-type]
+            -1,  # ty: ignore[invalid-argument-type]
+            0.0,  # ty: ignore[invalid-argument-type]
+        )
+        score = score / score.sum(-1, keepdim=True)
+    else:
+        # Preserve topk-softmax semantics (including low-precision underflow).
+        weights, indices = _routing_weights(
+            router_logits, layer.top_k, recipe.routing, layer.spyre_moe_route_dtype
+        )
+        score = torch.zeros_like(router_logits).scatter(-1, indices, weights)
+    fn = sparse_decode if decode else sparse_prefill
+    ids = layer.spyre_moe_expert_ids if decode else layer.spyre_moe_token_ids
+    return fn(
+        x,
+        score,
+        layer.spyre_moe_gate,
+        layer.spyre_moe_up,
+        layer.spyre_moe_down,
+        ids,
+        recipe.activation,
     )
 
 
@@ -990,6 +1037,11 @@ def _prepare_layer(layer: RoutedExperts) -> None:
         else dtype
     )
     layer.spyre_moe_route_identity = torch.eye(stick, dtype=dtype).to("spyre")
+    mode = getattr(layer, "spyre_moe_impl", "current")
+    if mode != "current":
+        chunk = 512 * ((experts + layer.top_k - 1) // layer.top_k)
+        layer.spyre_moe_token_ids = torch.arange(chunk, dtype=torch.int32).to("spyre")
+        layer.spyre_moe_expert_ids = torch.arange(experts, dtype=torch.int32).to("spyre")
     logger.info_once(
         "Spyre: relaid out routed-expert stacks (%d experts, hidden=%d, intermediate=%d%s).",
         experts,
@@ -1058,6 +1110,16 @@ class SpyreUnquantizedFusedMoEMethod(UnquantizedFusedMoEMethod):
     ) -> torch.Tensor:
         layer = cast("RoutedExperts", layer)
         tokens = x.shape[0]
+        mode = getattr(layer, "spyre_moe_impl", "current")
+        decode = tokens <= (32 if mode == "sparse" else envs.SPYRE_MOE_GATHERED_MAX_TOKENS)
+        if mode == "sparse" or (mode == "sparse_prefill" and not decode):
+            if torch.compiler.is_compiling():
+                return _sparse(layer, x, router_logits, decode)
+            moe_scope, persistent_scope = _compiler_scopes()
+            with moe_scope, persistent_scope:
+                return _region(layer, "sparse_decode" if decode else "sparse_prefill", _sparse)(
+                    layer, x, router_logits, decode
+                )
         if torch.compiler.is_compiling():
             # Traced into the block graph, which SpyreMoERunner only does for stick-aligned
             # batches: the persistent form runs inline, without compiled regions or their
