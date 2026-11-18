@@ -816,6 +816,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#cross-layer-kv-sharing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-layer KV sharing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#lx-resident-pages" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1803,6 +1814,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#cross-layer-kv-sharing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-layer KV sharing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#lx-resident-pages" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2391,6 +2413,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#cross-layer-kv-sharing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-layer KV sharing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#lx-resident-pages" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2634,7 +2667,7 @@ sub-stick half) run directly in the compiled graph (see below).</p>
 <td>FP8 <code>ColumnParallelLinear</code> / fused QKV / <code>MergedColumnParallelLinear</code> / <code>RowParallelLinear</code></td>
 <td><code>SpyreFp8LinearKernel</code></td>
 <td>Spyre</td>
-<td>Checkpoint FP8 is DMA'd straight into <code>qfp8wt</code> at load (torch-spyre#4663), so <code>model.to("spyre")</code> skips it. <code>quantscalepertokenfp8</code> + <code>qfp8ch</code> + <code>spyre.scaled_mm</code> trace into the block graph, or compile as their own graph (<code>maybe_compile</code>) outside one. The LM head stays FP16 unless a compressed-tensors checkpoint ships it in FP8, which <code>SpyreFp8LMHeadMethod</code> DMAs into <code>qfp8wt</code> as is, compiled even under <code>enforce_eager</code></td>
+<td>Checkpoint FP8 is DMA'd straight into <code>qfp8wt</code> at load (torch-spyre#4663), so <code>model.to("spyre")</code> skips it. <code>quantscalepertokenfp8</code> + <code>qfp8ch</code> + <code>spyre.scaled_mm</code> trace into the block graph, or compile as their own graph (<code>maybe_compile</code>) outside one. The LM head stays FP16 unless a compressed-tensors checkpoint ships it in FP8, which <code>SpyreFp8LMHeadMethod</code> DMAs into <code>qfp8wt</code> as is, compiled even under <code>enforce_eager</code>. For <code>quantization="fp8"</code> checkpoints the plugin replaces vLLM's config with <code>SpyreFp8Config</code> (<code>quantization/fp8.py</code>): a fused module's per-tensor shard scales become one <code>[1]</code> scale when they match and an <code>[N, 1]</code> per-channel scale when they differ, so the FP8 weight is never requantized (upstream requantizes through <code>_C</code>, which the vLLM build here lacks). Compressed-tensors, Quark and ModelOpt per-tensor checkpoints still take upstream's requant</td>
 </tr>
 </tbody>
 </table>
@@ -2684,12 +2717,12 @@ their own. Registration is lazy — nothing is imported until vLLM resolves the 
 and <code>register_models()</code> first checks every key against vLLM's own registry, so an upstream
 rename fails loudly instead of silently falling through to the unadapted class.</p>
 <p>Where upstream hardcodes a class and offers no hook (the BERT wrappers hardcode
-<code>embedding_class</code>), the already-built instance is <strong>retyped</strong> to its Spyre subclass — same
+<code>embedding_class</code>; gemma-4 builds its self-decoder inline), the already-built instance is <strong>retyped</strong> to its Spyre subclass — same
 <code>__init__</code>, same parameters and module tree, but a Spyre <code>forward</code> and armed compile
 state. Prefer a documented upstream extension point where one exists: <code>CustomOp.register_oot</code> /
 <code>PluggableLayer.register_oot</code> for a layer, and — for a MoE — the quant-method seam the
 unquantized oracle leaves open for an out-of-tree platform.</p>
-<p>Two adaptations worth knowing:</p>
+<p>Three adaptations worth knowing:</p>
 <ul>
 <li><strong>BERT / RoBERTa</strong> (<code>models/_token_type.py</code>) carry <code>token_type_ids</code> in a side buffer
   owned by the embedding instead of vLLM's bit-pack into the high bits of <code>input_ids</code>,
@@ -2697,7 +2730,8 @@ unquantized oracle leaves open for an out-of-tree platform.</p>
   Their word/segment/position gathers and layer norm can form a separate compiled
   embedding prologue when no enclosing graph traces them; RoBERTa's position offset is
   applied on the host before the gather.</li>
-<li><strong>MoE</strong> (<code>moe.py</code>) supplies the routed-expert backend vLLM's unquantized MoE oracle lacks
+<li>
+<p><strong>MoE</strong> (<code>moe.py</code>) supplies the routed-expert backend vLLM's unquantized MoE oracle lacks
   for an out-of-tree platform (it selects <code>UnquantizedMoeBackend.OOT</code> — no kernel — and
   leaves <code>process_weights_after_loading</code> to the plugin). A <code>CustomOp.register_oot</code>
   replacement for <code>UnquantizedFusedMoEMethod</code> computes the experts in two Spyre forms —
@@ -2720,7 +2754,22 @@ unquantized oracle leaves open for an out-of-tree platform.</p>
   <code>models/gemma4.py</code>). <code>Gemma4DecoderLayer.forward</code> is untouched. <code>SpyreMoERunner</code>, an OOT
   <code>MoERunner</code>, takes vLLM's direct <code>_moe_forward</code> entry — as upstream does on CPU and TPU —
   instead of the opaque <code>torch.ops.vllm.moe_forward</code> custom op, so a compiled block traces
-  the expert forms into its own graph; an eager run dispatches them to compiled regions.</li>
+  the expert forms into its own graph; an eager run dispatches them to compiled regions.</p>
+</li>
+<li>
+<p><strong>Gemma-4 per-layer embeddings</strong> (<code>models/gemma4.py</code>, E2B / E4B) retype the self-decoder
+  to <code>SpyreGemma4SelfDecoderLayers</code>. Its upstream PLE lookup, including the in-vocab mask,
+  always runs in a compiled region, including under <code>--enforce-eager</code>; an enclosing graph
+  absorbs it rather than nesting a compile. The lookup and row-splitting methods cache
+  their compiled callables independently. It cuts the backbone's per-layer rows in one
+  compiled graph and hands each block its own offset-0 row through the <code>[:, layer_idx, :]</code>
+  the backbone loop already does. A view of the packed tensor carries a different
+  <code>storage_offset</code> per layer, which torch-spyre guards on, so every layer would compile
+  its own block. The multimodal wrapper allocates its PLE cache on the host as a plain
+  attribute, so <code>models/gemma4_mm.py</code> re-registers it as a buffer that follows the model
+  to the device; that runs even text-only, since the default load keeps the wrapper with
+  every modality at 0.</p>
+</li>
 </ul>
 <h3 id="moe-expert-weights">MoE expert weights<a class="headerlink" href="#moe-expert-weights" title="Permanent link">&para;</a></h3>
 <p><code>_prepare_layer</code> moves each layer's experts to the device once, as three stacks, and hands
@@ -2771,6 +2820,19 @@ per-core working set. For Gemma 4 with <code>top_k=8</code> and 32 cores this se
 <code>SPYRE_MOE_CHUNKS</code> overrides the derived value; the override must still split <code>H</code> into
 whole-stick chunks. Alias entry <code>e·C + c</code> is chunk <code>c</code> of expert <code>e</code>. TP narrows only <code>M</code>, so
 the slicing is unchanged at every TP degree.</p>
+<p>Each stack goes to the card in chunks of experts: a chunk is padded and made contiguous on the
+host and copied into its slice of the device tensor. The copy is host-bound (the device-format
+conversion), so the chunking costs no time, and a chunk's transpose stays in cache where a
+whole stack's does not.</p>
+<p>The relayout and copy of one layer's stacks are independent of every other layer's, so loading
+prepares the layers on <code>SPYRE_MOE_PREP_THREADS</code> threads (default <code>min(8, torch threads)</code>, this
+worker's share of the CPU budget, at most 16; <code>1</code> prepares them in order). The pool lives for
+one load: the loader waits for every layer before anything reads the model, and a load that
+fails joins its threads. A recipe's down-weight transform (Gemma folds its expert scale
+there) runs per chunk too, and a <code>swigluoai</code> stack's gate and up rows are read as strided
+views, so no recipe builds a whole stack either: a load's transient host memory is the
+threads times one chunk, or two chunks for a recipe with a down transform, whose output is
+staged once more before the copy.</p>
 <p>Decode orders the <code>top_k·C</code> entries row-major (row, then chunk): the entry index is the widened
 expert index times <code>C</code> plus a <code>[1, C, 1]</code> offset, both device tensors made at load, so the input
 is one broadcast, the gate/up chunk sum reduces a contiguous axis and the down parts reshape
@@ -2869,7 +2931,9 @@ class with <code>SpyreVisionEncoderMixin</code> (<code>models/_vision_encoder.py
 upstream's <code>SupportsEncoderCudaGraph</code> protocol, so the bucketing is upstream's:
 <code>EncoderCudaGraphManager</code> picks power-of-two token budgets (or takes
 <code>encoder_cudagraph_token_budgets</code>), packs a step's images into them, pads the inputs and splits
-the output per image. <code>SpyreEncoderGraphManager</code>
+the output per image. The mixin caps the largest budget at <code>max_model_len</code>: an image's encoder
+tokens are among its prompt's, so a larger one never reaches the encoder (granite vision, whose
+padded tiles can outnumber its placeholders, keeps its own range). <code>SpyreEncoderGraphManager</code>
 (<code>v1/worker/spyre_encoder_graph.py</code>) replaces only capture and replay: capturing a budget
 compiles the encoder at that static shape during warmup, and replay uploads the padded
 inputs and runs those graphs. Warmup compiles every budget, largest first, after the attention
@@ -2963,6 +3027,13 @@ budgets and <code>EncoderItemSpec.output_tokens</code>, and host inputs hold one
 <td>layout bound on items per encoder call</td>
 <td>63 (one-hot width)</td>
 <td>63 (one-hot width)</td>
+</tr>
+<tr>
+<td><code>vision_items_limited_by_tokens</code></td>
+<td>no</td>
+<td>limit items per call by budget tokens and <code>vision_max_items_per_call</code> (then required) instead of upstream's smallest budget</td>
+<td><code>False</code></td>
+<td><code>False</code></td>
 </tr>
 <tr>
 <td><code>vision_pack_tokens</code></td>
@@ -3066,6 +3137,14 @@ path, the KV store, and the cache's device layout — live under
 the host-side orchestration that calls them. The worker allocates each layer's cache
 through its impl (<code>allocate_pages</code>), so the shape, the layout and the kernels cannot
 disagree.</p>
+<h3 id="cross-layer-kv-sharing">Cross-layer KV sharing<a class="headerlink" href="#cross-layer-kv-sharing" title="Permanent link">&para;</a></h3>
+<p>A layer with a <code>kv_sharing_target_layer_name</code> (gemma-4 E2B / E4B) allocates no cache: the
+runner aliases its target's pages in <code>initialize_kv_cache_tensors</code>. vLLM adds such a layer to
+its target's KV cache group but not to that group's <code>UniformTypeKVCacheSpecs</code>, so the
+per-layer spec lookup in <code>initialize_attn_backend</code> would <code>KeyError</code>; both runners hand the
+attention backend a copy (<code>with_kv_sharing_layer_specs</code>) that maps it to the target's spec,
+leaving the retained config's specs, and so its <code>page_size_bytes</code>, physical. YOCO fast prefill
+(<code>kv_sharing_fast_prefill</code>) swaps in an attention backend Spyre does not provide and is rejected.</p>
 <p>Because attention kernels are <code>dynamic=False</code> too, they are pre-compiled during warmup
 rather than lazily on first use: by default (<code>SPYRE_ATTN_RECORD=1</code>) warmup records
 per-sequence variants from <code>SpyreAttnBucketer.variants()</code>. A query bucket pairs only with
@@ -3271,11 +3350,18 @@ The weight transposes happen before that, in each layer's
 call boundary:</p>
 <ul>
 <li><strong>Input</strong>: CPU <code>int32</code>/<code>int64</code> tensors → Spyre <code>int64</code> (for embedding lookup)</li>
-<li><strong>Output</strong>: Spyre <code>float16</code> tensors → CPU (for logits indexing and sampling). A pooling
-  model whose pooler runs on Spyre keeps its hidden states there instead, and the pooler
-  copies back only the pooled vectors</li>
-<li><strong><code>compute_logits</code></strong>: moves the CPU-sliced <code>hidden_states[logits_indices]</code> back onto
-  Spyre for the <code>SpyreParallelLMHead</code> matmul, which returns logits on Spyre</li>
+<li><strong>Output</strong>: a generative model's hidden states stay on Spyre. Upstream's
+  <code>hidden_states[logits_indices]</code> is routed through <code>select_rows</code>, which gathers the
+  sampled rows on Spyre onto a warmed row bucket (the padded sampled-row counts the lm_head
+  compiles for, see <a href="../user_guide/configuration.html#decoder-compile-buckets">Decoder compile buckets</a>);
+  a decode step whose indices are the
+  identity reuses the padded body output with no gather. A pooling model whose pooler
+  runs on Spyre keeps its hidden states there too, and the pooler copies back only the
+  pooled vectors. Every other output, including the eager decoder's, which has no shape
+  bucketer, is converted to CPU</li>
+<li><strong><code>compute_logits</code></strong>: projects a gathered row bucket on Spyre directly. Any other
+  input, such as a prompt-logprob slice, is padded onto a row bucket on the host and moved
+  onto Spyre for the <code>SpyreParallelLMHead</code> matmul. Only the logits cross back to the host</li>
 </ul>
 <p><code>SpyreVocabParallelEmbedding</code> inherits weight loading and shard arithmetic from upstream
 and overrides <code>forward</code>. The weight moves to Spyre with the rest of the model, and the
